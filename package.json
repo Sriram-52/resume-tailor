@@ -1,0 +1,63 @@
+{
+  "name": "resume-tailor",
+  "version": "0.1.0",
+  "description": "Tailor your resume to a job description using your Claude Code subscription",
+  "main": "./out/main/index.js",
+  "author": "Sriram",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist": "electron-vite build && electron-builder --dir",
+    "dist:dmg": "electron-vite build && electron-builder",
+    "install:app": "pnpm dist && rm -rf \"$HOME/Applications/Resume Tailor.app\" && cp -R \"release/mac-arm64/Resume Tailor.app\" \"$HOME/Applications/\" && xattr -dr com.apple.quarantine \"$HOME/Applications/Resume Tailor.app\" && echo \"Installed to ~/Applications\""
+  },
+  "build": {
+    "appId": "dev.codebyram.resume-tailor",
+    "productName": "Resume Tailor",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/@anthropic-ai/**"
+    ],
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": null
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.204",
+    "electron-updater": "^6.3.9",
+    "mammoth": "^1.12.0",
+    "pdfjs-dist": "^4.10.38",
+    "zod": "^4.4.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^2.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
