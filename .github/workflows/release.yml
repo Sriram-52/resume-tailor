@@ -33,7 +33,10 @@ jobs:
         run: pnpm build
 
       - name: Package DMG (ad-hoc signed via afterPack hook)
-        run: pnpm exec electron-builder --mac --arm64
+        # --publish never: electron-builder only builds the DMG. The release +
+        # upload is done by the next step (softprops), so electron-builder must
+        # not try to publish (which would demand a GH_TOKEN it doesn't need).
+        run: pnpm exec electron-builder --mac --arm64 --publish never
         env:
           # No Apple credentials: identity is null and we ad-hoc sign in afterPack.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
