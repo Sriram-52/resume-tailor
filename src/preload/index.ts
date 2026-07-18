@@ -3,6 +3,7 @@ import type { MasterResume, ProfilesState } from '../shared/resume'
 import type { Application, KeywordGap, Suggestion } from '../shared/application'
 import type { ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
+import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 
 export interface ClaudeResult {
   ok: boolean
@@ -71,10 +72,28 @@ const api = {
   showItemInFolder: (path: string): Promise<void> => ipcRenderer.invoke('shell:showItem', path),
 
   // Conversational agent
-  startChat: (m: MasterResume, jd: string, gap: KeywordGap | null): Promise<boolean> =>
-    ipcRenderer.invoke('chat:start', m, jd, gap),
+  startChat: (
+    m: MasterResume,
+    jd: string,
+    gap: KeywordGap | null,
+    master: MasterResume
+  ): Promise<boolean> => ipcRenderer.invoke('chat:start', m, jd, gap, master),
   setChatGap: (gap: KeywordGap | null): Promise<boolean> =>
     ipcRenderer.invoke('chat:setGap', gap),
+
+  // Job discovery
+  searchJobs: (
+    filters: JobSearchFilters
+  ): Promise<{ ok: boolean; data?: JobLead[]; error?: string }> =>
+    ipcRenderer.invoke('jobs:search', filters),
+  scoreJobs: (
+    resume: MasterResume,
+    leads: JobLead[]
+  ): Promise<{ ok: boolean; data?: JobLead[]; error?: string }> =>
+    ipcRenderer.invoke('jobs:score', resume, leads),
+  loadJobResults: (): Promise<JobResultsState | null> => ipcRenderer.invoke('jobs:results:load'),
+  saveJobResults: (state: JobResultsState): Promise<boolean> =>
+    ipcRenderer.invoke('jobs:results:save', state),
   sendChat: (text: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('chat:send', text),
   cancelChat: (): Promise<boolean> => ipcRenderer.invoke('chat:cancel'),

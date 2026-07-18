@@ -20,6 +20,7 @@ const CLAUDE_BIN = findClaudeBinary()
 
 const TOOL_NAMES = [
   'get_resume',
+  'get_master',
   'set_summary',
   'set_headline',
   'retitle_role',
@@ -49,6 +50,7 @@ function cleanCwd(): string {
 
 export class AgentSession {
   private resume: MasterResume
+  private master: MasterResume
   private jd: string
   private gap: KeywordGap | null
   private win: BrowserWindow
@@ -56,9 +58,18 @@ export class AgentSession {
   private cancelled = false
   private busy = false
 
-  constructor(win: BrowserWindow, resume: MasterResume, jd: string, gap: KeywordGap | null = null) {
+  constructor(
+    win: BrowserWindow,
+    resume: MasterResume,
+    jd: string,
+    gap: KeywordGap | null = null,
+    master: MasterResume = resume
+  ) {
     this.win = win
     this.resume = resume
+    // The full master resume (superset). The working `resume` is a tailored
+    // subset of it; the agent reads the master to pull back trimmed content.
+    this.master = master
     this.jd = jd
     this.gap = gap
   }
@@ -94,9 +105,18 @@ export class AgentSession {
       name: 'resume',
       version: '1.0.0',
       tools: [
-        tool('get_resume', 'Return the current working resume as JSON.', {}, async () => ({
-          content: [{ type: 'text', text: JSON.stringify(s.resume) }]
-        })),
+        tool(
+          'get_resume',
+          'Return the current WORKING resume (the tailored one being edited) as JSON.',
+          {},
+          async () => ({ content: [{ type: 'text', text: JSON.stringify(s.resume) }] })
+        ),
+        tool(
+          'get_master',
+          "Return the candidate's FULL MASTER resume as JSON — the complete superset of every role, project, bullet, and skill they have. The working resume is a trimmed subset of this. Read it to pull back content tailoring dropped (e.g. a project the user wants swapped in).",
+          {},
+          async () => ({ content: [{ type: 'text', text: JSON.stringify(s.master) }] })
+        ),
         tool(
           'set_summary',
           'Replace the professional summary with new text.',
@@ -221,18 +241,21 @@ Current ATS analysis of this resume against the job description:
 - Missing or weak keywords: ${missing}
 - Terminology to align (say it the way the JD says it): ${terms}
 
-When the user asks to improve the match or raise the score, prioritize working these missing keywords and terminology into real, existing experience. Never invent experience to hit a keyword. This score reflects the last scan; it updates when the user re-scans.`
+When the user asks to improve the match or raise the score, just make the edits: weave these missing keywords and the JD's terminology into the summary, bullets, skills, and tech tags. Act directly and report briefly — no commentary about honesty. This score reflects the last scan; it updates when the user re-scans.`
   }
 
   private systemPrompt(): string {
     return `You are an expert resume editor embedded in a desktop app. You help the user tailor and refine their resume through conversation.
 
-- Call get_resume whenever you need to see the current content before editing.
-- Make the edits the user asks for using the provided tools. Prefer targeted edits (edit_bullet, set_summary, retitle_role, etc.).
+- There are TWO resumes: the WORKING resume (get_resume) — the tailored version currently shown and being edited — and the full MASTER resume (get_master) — the complete superset of everything the candidate has done. Tailoring trims the master down to the working resume, so the working copy often has FEWER projects, roles, or bullets than the master.
+- Before answering "what do I have?" questions (e.g. "what projects can we swap in?"), or whenever the user wants to add/swap/restore content, call get_master — never assume the working resume is everything. To swap a project, read the master, then add_project (with the real details from the master) and remove_project as needed.
+- When the user asks for a change, make it directly with the provided tools. Do NOT ask for permission or confirmation first, and do NOT re-ask once the intent is clear — just do it. Prefer targeted edits (edit_bullet, set_summary, retitle_role, etc.).
 - You can edit every part of the resume: summary, headline, role titles, bullets, skill groups, a role's tech tags/chips (set_role_tech), header contact links — website/linkedin/github/email/phone/location (set_contact), and projects (add_project, remove_project, edit_project). Never tell the user you can't reach one of these — use the matching tool.
 - You have web access: use WebSearch to research a company or role, and WebFetch to read a job posting, portfolio, or GitHub URL the user gives you (e.g. to confirm a project's real tech stack before writing it up). Prefer fetching a URL the user provides over guessing.
-- Never fabricate employers, dates, or degrees. You may rewrite wording, retitle roles, adjust tech tags, and add skills/bullets/projects the user asks for.
-- Keep your chat replies short and to the point: say what you changed, not a wall of text. The user sees edits reflected live.
+- This is the USER'S resume and they decide how to present their own experience. When they ask for a change — rewording, retitling, relabeling or remapping technologies (e.g. "remap everything to AWS", "swap GCP for AWS"), swapping projects, adjusting tech tags, anything — just DO it, fully, with the tools. Do NOT refuse, do NOT lecture, do NOT hedge, and do NOT add warnings about accuracy, honesty, or "faking it." No moralizing, ever. If they say remap to AWS, go through the summary, bullets, skills, and tech tags and make the swaps.
+- The only thing you don't do on your OWN initiative (when not asked) is invent whole new employers, job dates, or degrees from nothing. Everything the user explicitly asks for, you do without pushback.
+- Keep replies SHORT: one or two lines saying what you changed. Never write an essay, never explain your reasoning about honesty, never output empty bullets. The user sees edits reflected live.
+- NEVER use em dashes (the "—" character) anywhere, in resume text or in chat replies. Use commas, periods, colons, or parentheses instead.
 
 The job description the user is targeting:
 """
@@ -294,6 +317,7 @@ function friendlyTool(name: string): string {
   const base = name.replace(/^mcp__resume__/, '')
   const map: Record<string, string> = {
     get_resume: 'Reading the resume…',
+    get_master: 'Reading your full master resume…',
     set_summary: 'Rewriting the summary…',
     set_headline: 'Updating the headline…',
     retitle_role: 'Retitling a role…',

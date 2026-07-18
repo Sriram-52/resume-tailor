@@ -845,6 +845,324 @@ select:focus {
   font-size: 11px;
 }
 
+/* Discover (job search): results list is the hero, filters in a popover */
+.discover {
+  max-width: 920px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+}
+.disco-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.disco-head h2 {
+  margin: 0 0 2px;
+}
+.disco-head-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.disco-summary {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.disco-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  z-index: 20;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.disco-popover .grid2 {
+  align-items: end;
+}
+.disco-popover .pop-remote {
+  align-self: center;
+}
+.disco-cost {
+  font-size: 11.5px;
+  margin: 8px 0 0;
+}
+.disco-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 16px;
+  min-height: 0;
+  padding-right: 4px;
+}
+.disco-state {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  text-align: center;
+  padding: 24px;
+}
+.disco-scoring {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+/* Job feed card (jobright-style) */
+.jcard {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.jcard-tracked {
+  opacity: 0.62;
+}
+.jcard-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.jcard-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.jcard-body {
+  min-width: 0;
+}
+.jcard-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.jchip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--panel2);
+  color: var(--muted);
+}
+.jchip.applied {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--ok);
+  text-transform: capitalize;
+}
+.jcard-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.jcard-company {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 2px;
+}
+.jcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.jcard-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mini-ic {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.jcard-salary {
+  color: var(--ok);
+  font-weight: 600;
+}
+.jcard-reason {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 8px;
+}
+.jcard-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.jcard-tracked-note {
+  font-size: 13px;
+}
+
+/* Match gauge */
+.jcard-gauge {
+  align-self: stretch;
+  min-width: 128px;
+  border-radius: 12px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(160deg, #10151b, #0c1712);
+  border: 1px solid var(--border);
+}
+.gauge-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.jcard-gauge.score-hi .gauge-label {
+  color: var(--ok);
+}
+.jcard-gauge.score-mid .gauge-label {
+  color: var(--warn);
+}
+.jcard-gauge.score-lo .gauge-label {
+  color: var(--err);
+}
+.ring {
+  position: relative;
+  width: 68px;
+  height: 68px;
+}
+.ring svg {
+  width: 100%;
+  height: 100%;
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 7;
+}
+.ring-value {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease;
+}
+.ring.score-hi {
+  color: var(--ok);
+}
+.ring.score-mid {
+  color: var(--warn);
+}
+.ring.score-lo {
+  color: var(--err);
+}
+.ring-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* Resume diff (changes vs base) */
+.diff-sec {
+  margin-bottom: 18px;
+}
+.diff-sec h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 11px;
+}
+.diff-tag,
+.diff-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+.diff-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+}
+.diff-tag.add {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--ok);
+}
+.diff-meta {
+  margin-top: 4px;
+  font-style: italic;
+}
+.diff-line {
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+.diff-text {
+  line-height: 1.6;
+}
+.diff ins,
+.diff-line ins {
+  text-decoration: none;
+  background: rgba(74, 222, 128, 0.16);
+  color: #b7f7cf;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.diff del,
+.diff-line del {
+  text-decoration: line-through;
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.diff-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  vertical-align: middle;
+}
+.diff-chip {
+  font-size: 11.5px;
+  padding: 1px 8px;
+  border-radius: 20px;
+}
+.diff-chip.add {
+  background: rgba(74, 222, 128, 0.14);
+  color: #b7f7cf;
+}
+.diff-chip.del {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  text-decoration: line-through;
+}
+
 /* Applications table */
 .apps-table {
   width: 100%;

@@ -4,19 +4,24 @@ import { emptyMaster } from '../../../shared/resume'
 import type { Application, KeywordGap } from '../../../shared/application'
 import { getTemplate, templates } from '../templates'
 import { ChatPanel } from './ChatPanel'
+import { DiffView } from './DiffView'
 import { Area, Button, Field, Spinner } from '../ui'
 
-type Panel = 'preview' | 'ats' | 'cover' | 'job'
+type Panel = 'preview' | 'ats' | 'cover' | 'job' | 'diff'
 
 export function Tailor({
   profiles,
   activeId,
+  onSelectProfile,
   onSaved,
   onUpdateProfile,
   reloadToken
 }: {
   profiles: ResumeProfile[]
+  /** The globally selected profile (sidebar). This is the single source of truth. */
   activeId: string
+  /** Change the global profile selection. */
+  onSelectProfile: (id: string) => void
   onSaved: (apps: Application[]) => void
   /** Overwrite an existing profile's resume — used to promote the tailored one to its base. */
   onUpdateProfile: (id: string, resume: MasterResume) => void
@@ -28,9 +33,9 @@ export function Tailor({
   const [role, setRole] = useState('')
   const [jobUrl, setJobUrl] = useState('')
   const [templateId, setTemplateId] = useState('classic')
-  const [baseId, setBaseId] = useState(activeId)
 
-  const master = profiles.find((p) => p.id === baseId)?.resume ?? emptyMaster()
+  // The base resume is the globally-selected profile — no separate local state.
+  const master = profiles.find((p) => p.id === activeId)?.resume ?? emptyMaster()
 
   const [tailored, setTailored] = useState<MasterResume | null>(null)
   const [gap, setGap] = useState<KeywordGap | null>(null)
@@ -65,7 +70,6 @@ export function Tailor({
       setRole(d.role)
       setJobUrl(d.jobUrl ?? '')
       setTemplateId(d.templateId || 'classic')
-      if (d.baseId && profiles.some((p) => p.id === d.baseId)) setBaseId(d.baseId)
       setTailored(d.tailored)
       setGap(d.gap)
       setCover(d.cover)
@@ -98,7 +102,7 @@ export function Tailor({
         role,
         jobUrl,
         templateId,
-        baseId,
+        baseId: activeId,
         tailored,
         gap,
         cover,
@@ -107,7 +111,7 @@ export function Tailor({
       })
     }, 500)
     return () => clearTimeout(t)
-  }, [jd, company, role, jobUrl, templateId, baseId, tailored, gap, cover, appId, appCreatedAt])
+  }, [jd, company, role, jobUrl, templateId, activeId, tailored, gap, cover, appId, appCreatedAt])
 
   async function runAll(): Promise<void> {
     if (!jd.trim()) return
@@ -180,7 +184,7 @@ export function Tailor({
       status: 'draft',
       jobUrl: jobUrl.trim() || undefined,
       jobDescription: jd,
-      baseId,
+      baseId: activeId,
       tailored,
       keywordGap: gap,
       coverLetter: cover,
@@ -202,13 +206,13 @@ export function Tailor({
   /** Promote the current tailored resume to its base profile, overwriting it. */
   function updateBase(): void {
     if (!tailored) return
-    const base = profiles.find((p) => p.id === baseId)
+    const base = profiles.find((p) => p.id === activeId)
     const ok = window.confirm(
       `Replace your base resume${base ? ` "${base.name}"` : ''} with this tailored version?\n\n` +
         `Future tailoring will start from this version. This overwrites the base you tailored from and can't be undone.`
     )
     if (!ok) return
-    onUpdateProfile(baseId, tailored)
+    onUpdateProfile(activeId, tailored)
     setError('')
     setSavedMsg(
       `Updated your base resume${base ? ` "${base.name}"` : ''}. Future tailoring starts from this version.`
@@ -236,7 +240,7 @@ export function Tailor({
       role: '',
       jobUrl: '',
       templateId,
-      baseId,
+      baseId: activeId,
       tailored: null,
       gap: null,
       cover: null
@@ -271,7 +275,7 @@ export function Tailor({
           {profiles.length > 1 && (
             <label className="field field-full">
               <span>Base resume</span>
-              <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
+              <select value={activeId} onChange={(e) => onSelectProfile(e.target.value)}>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -318,6 +322,7 @@ export function Tailor({
   const panelTitle: Record<Panel, string> = {
     preview: 'Resume preview',
     ats: 'ATS match',
+    diff: 'Changes',
     cover: 'Cover letter',
     job: 'Job description'
   }
@@ -340,7 +345,7 @@ export function Tailor({
         </div>
 
         <div className="ws-tabs">
-          {(['preview', 'ats', 'cover', 'job'] as Panel[]).map((p) => (
+          {(['preview', 'diff', 'ats', 'cover', 'job'] as Panel[]).map((p) => (
             <button
               key={p}
               className={`ws-tab ${panel === p ? 'active' : ''}`}
@@ -360,9 +365,9 @@ export function Tailor({
             ))}
           </select>
           {profiles.length > 1 && (
-            <label className="ws-base" title="Which base resume profile “Update base” writes to">
+            <label className="ws-base" title="The selected resume profile (shared with the sidebar)">
               <span>Base</span>
-              <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
+              <select value={activeId} onChange={(e) => onSelectProfile(e.target.value)}>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -374,7 +379,7 @@ export function Tailor({
           <Button
             variant="ghost"
             onClick={updateBase}
-            title={`Save these edits into “${profiles.find((p) => p.id === baseId)?.name ?? 'base'}” so future tailoring starts from them`}
+            title={`Save these edits into “${profiles.find((p) => p.id === activeId)?.name ?? 'base'}” so future tailoring starts from them`}
           >
             Update base
           </Button>
@@ -393,6 +398,7 @@ export function Tailor({
           <ChatPanel
             key={tailorVersion}
             resume={tailored}
+            master={master}
             jd={jd}
             gap={gap}
             onResume={setTailored}
@@ -414,6 +420,8 @@ export function Tailor({
                   <iframe title="preview" srcDoc={html} />
                 </div>
               )}
+
+              {panel === 'diff' && <DiffView base={master} tailored={tailored} />}
 
               {panel === 'ats' && (
                 <>

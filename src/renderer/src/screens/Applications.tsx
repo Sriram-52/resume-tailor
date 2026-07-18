@@ -19,8 +19,8 @@ export function Applications({
 }: {
   apps: Application[]
   setApps: (a: Application[]) => void
-  /** Seed the Tailor draft and jump to it (used to resume editing a draft application). */
-  onContinueDraft: () => void
+  /** Seed the Tailor draft and jump to it; the base id re-selects that profile globally. */
+  onContinueDraft: (baseId?: string) => void
 }): React.JSX.Element {
   const [selected, setSelected] = useState<Application | null>(null)
 
@@ -39,7 +39,7 @@ export function Applications({
       appId: a.id,
       appCreatedAt: a.createdAt
     })
-    onContinueDraft()
+    onContinueDraft(a.baseId)
   }
 
   async function setStatus(a: Application, status: ApplicationStatus): Promise<void> {

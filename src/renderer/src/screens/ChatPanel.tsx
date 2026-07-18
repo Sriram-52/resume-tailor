@@ -17,12 +17,15 @@ interface Msg {
  */
 export function ChatPanel({
   resume,
+  master,
   jd,
   gap,
   onResume,
   hero = false
 }: {
   resume: MasterResume
+  /** The full master resume (superset) so the agent can pull back trimmed content. */
+  master: MasterResume
   jd: string
   /** Current ATS analysis, so the agent can prioritize raising the score. */
   gap: KeywordGap | null
@@ -50,7 +53,7 @@ export function ChatPanel({
   useEffect(() => {
     let unsub = (): void => {}
     ;(async () => {
-      await window.api.startChat(resume, jd, gap)
+      await window.api.startChat(resume, jd, gap, master)
       setReady(true)
     })()
 
@@ -108,9 +111,7 @@ export function ChatPanel({
         {!ready && <span className="muted">connecting…</span>}
       </div>
       <p className="muted">
-        Ask for anything: "tighten the summary to 3 sentences", "retitle Acme to Staff Engineer",
-        "swap the tech tags on Acme to Java, Spring Boot, AWS", "update my GitHub link", "drop the
-        RAG Assistant project". Edits apply live.
+        Ask for anything: "tighten the summary to 3 sentences". Edits apply live.
       </p>
 
       <div className="chat-log" ref={scrollRef}>

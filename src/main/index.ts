@@ -27,7 +27,9 @@ import {
   saveApplication,
   deleteApplication,
   loadDraft,
-  saveDraft
+  saveDraft,
+  loadJobResults,
+  saveJobResults
 } from './store'
 import {
   importPrompt,
@@ -38,11 +40,21 @@ import {
 } from './prompts'
 import { exportHtmlToPdf } from './pdf'
 import { AgentSession } from './agent'
+import { loadEnvFile } from './config'
+import { searchDice, scoreJobLeads } from './jobs'
 import type { MasterResume, ProfilesState } from '../shared/resume'
 import type { Application, KeywordGap } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
+import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 
 const TAILOR_MODEL = process.env.TAILOR_MODEL // undefined -> claude.ts default
+
+/** Defensively strip a stray ``` code fence around plain-text model output. */
+function stripCoverFences(s: string): string {
+  const t = s.trim()
+  const m = t.match(/^```(?:\w+)?\s*\n([\s\S]*?)\n```$/)
+  return m ? m[1] : t
+}
 
 let mainWindow: BrowserWindow | null = null
 let chatSession: AgentSession | null = null
@@ -82,6 +94,9 @@ function createWindow(): BrowserWindow {
 }
 
 function registerIpc(): void {
+  // Load .env (APIFY_TOKEN etc.) into process.env for this run.
+  loadEnvFile()
+
   // Connection check
   ipcMain.handle('claude:ping', () =>
     runClaude('Reply with ONLY this JSON and nothing else: {"ok": true, "from": "claude"}')
@@ -141,19 +156,26 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'coverletter:run',
-    (_e, master: MasterResume, jd: string, company: string, role: string) =>
-      runClaudeJson<{ coverLetter: string }>(
-        coverLetterPrompt(master, jd, company, role),
-        { model: TAILOR_MODEL }
-      )
+    async (_e, master: MasterResume, jd: string, company: string, role: string) => {
+      // Cover letters are freeform prose — return plain text, not JSON (long
+      // letters with newlines/quotes break JSON.parse).
+      const r = await runClaude(coverLetterPrompt(master, jd, company, role), {
+        model: TAILOR_MODEL
+      })
+      if (!r.ok) return { ok: false, error: r.error }
+      return { ok: true, data: { coverLetter: stripCoverFences(r.text).trim() } }
+    }
   )
 
   // Conversational agent (chat)
-  ipcMain.handle('chat:start', (_e, resume: MasterResume, jd: string, gap: KeywordGap | null) => {
-    if (!mainWindow) return false
-    chatSession = new AgentSession(mainWindow, resume, jd, gap ?? null)
-    return true
-  })
+  ipcMain.handle(
+    'chat:start',
+    (_e, resume: MasterResume, jd: string, gap: KeywordGap | null, master: MasterResume) => {
+      if (!mainWindow) return false
+      chatSession = new AgentSession(mainWindow, resume, jd, gap ?? null, master ?? resume)
+      return true
+    }
+  )
   ipcMain.handle('chat:setGap', (_e, gap: KeywordGap | null) => {
     chatSession?.setGap(gap ?? null)
     return true
@@ -168,6 +190,17 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('chat:getResume', () => chatSession?.getResume() ?? null)
+
+  // Job discovery
+  ipcMain.handle('jobs:search', (_e, filters: JobSearchFilters) => searchDice(filters))
+  ipcMain.handle('jobs:score', (_e, resume: MasterResume, leads: JobLead[]) =>
+    scoreJobLeads(resume, leads)
+  )
+  ipcMain.handle('jobs:results:load', () => loadJobResults())
+  ipcMain.handle('jobs:results:save', (_e, state: JobResultsState) => {
+    saveJobResults(state)
+    return true
+  })
 
   // PDF export
   ipcMain.handle('pdf:export', (_e, html: string, defaultName: string) =>

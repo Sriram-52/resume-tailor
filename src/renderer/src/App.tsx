@@ -5,11 +5,13 @@ import type { Application } from '../../shared/application'
 import { MasterEditor } from './screens/MasterEditor'
 import { Tailor } from './screens/Tailor'
 import { Applications } from './screens/Applications'
+import { Discover } from './screens/Discover'
+import type { JobLead } from '../../shared/jobs'
 
-type Tab = 'tailor' | 'applications' | 'master'
+type Tab = 'tailor' | 'discover' | 'applications' | 'master'
 
 export default function App(): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>('tailor')
+  const [tab, setTab] = useState<Tab>('discover')
   const [profiles, setProfiles] = useState<ResumeProfile[]>([])
   const [activeId, setActiveId] = useState<string>('')
   const [apps, setApps] = useState<Application[]>([])
@@ -52,6 +54,23 @@ export default function App(): React.JSX.Element {
     persist({ profiles: [...profiles, p], activeId: p.id })
     setTab('master')
   }
+  /** Seed the Tailor draft from a discovered job and jump to the Tailor tab. */
+  async function openLeadInTailor(lead: JobLead): Promise<void> {
+    await window.api.saveDraft({
+      jd: lead.description,
+      company: lead.company,
+      role: lead.title,
+      jobUrl: lead.url,
+      templateId: 'classic',
+      baseId: activeId,
+      tailored: null,
+      gap: null,
+      cover: null
+    })
+    setTailorReload((n) => n + 1)
+    setTab('tailor')
+  }
+
   /** Overwrite an existing profile's resume (e.g. promote a tailored resume to its base). */
   function updateProfileResume(id: string, resume: MasterResume): void {
     persist({
@@ -90,6 +109,9 @@ export default function App(): React.JSX.Element {
           <button className={tab === 'tailor' ? 'active' : ''} onClick={() => setTab('tailor')}>
             Tailor
           </button>
+          <button className={tab === 'discover' ? 'active' : ''} onClick={() => setTab('discover')}>
+            Discover
+          </button>
           <button
             className={tab === 'applications' ? 'active' : ''}
             onClick={() => setTab('applications')}
@@ -124,16 +146,25 @@ export default function App(): React.JSX.Element {
           <Tailor
             profiles={profiles}
             activeId={activeId}
+            onSelectProfile={(id) => persist({ profiles, activeId: id })}
             onSaved={setApps}
             onUpdateProfile={updateProfileResume}
             reloadToken={tailorReload}
           />
         </div>
+        {/* Discover stays mounted so search results (which cost money) survive tab switches. */}
+        <div hidden={tab !== 'discover'} className="tab-pane">
+          <Discover resume={active.resume} apps={apps} onTailorLead={openLeadInTailor} />
+        </div>
         {tab === 'applications' && (
           <Applications
             apps={apps}
             setApps={setApps}
-            onContinueDraft={() => {
+            onContinueDraft={(baseId) => {
+              // Restore the profile this application was tailored from (global selection).
+              if (baseId && profiles.some((p) => p.id === baseId)) {
+                persist({ profiles, activeId: baseId })
+              }
               setTailorReload((n) => n + 1)
               setTab('tailor')
             }}

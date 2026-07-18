@@ -47,7 +47,9 @@ Goals:
 
 Hard rules:
 - NEVER fabricate employers, titles, dates, degrees, metrics, or technologies not present in the master.
+- NEVER use em dashes (the "—" character) in any text. Use commas, periods, colons, or parentheses instead.
 - Output ONLY the tailored JSON object. Same shape as the master. No markdown, no code fence, no commentary.
+- ALWAYS return the JSON, even if the job description is short, generic, or incomplete. Never ask the user for more information and never reply with prose. If the JD is thin, make light, safe choices and largely return the master as-is.
 
 MASTER RESUME (JSON):
 ${JSON.stringify(master)}
@@ -102,6 +104,7 @@ Guidance:
 - You may use section "title" to change a job title when it would better match the posting: target = the company to retitle that role, OR target = "" to change the PRIMARY headline shown under the candidate's name at the top of the resume (e.g. "Full Stack Developer"). Put the current title in "before" and the new one in "after".
 - Attach every change to an existing role/project/skill group or the summary (do not create new employers or jobs).
 - Rewrite in the posting's terminology; make each change concrete and natural.
+- NEVER use em dashes (the "—" character) in any suggested text. Use commas, periods, colons, or parentheses instead.
 - Offer 6-14 suggestions covering different keywords and sections so the user has real choice.
 - Output ONLY the JSON object. No markdown, no code fence, no commentary.
 
@@ -140,6 +143,34 @@ ${jobDescription}
 """`
 }
 
+/**
+ * Batch ATS-style fit scoring: score the resume against many jobs in one call,
+ * so a search of N results is a single Claude request, not N of them.
+ */
+export function scoreJobsPrompt(
+  master: MasterResume,
+  jobs: { id: string; title: string; company: string; jd: string }[]
+): string {
+  const list = jobs
+    .map((j) => `--- JOB id=${j.id} | ${j.title} @ ${j.company || 'Unknown'} ---\n${j.jd}`)
+    .join('\n\n')
+  return `You are an ATS analyst. For EACH job below, score how well the candidate's resume matches it, 0-100, the way an ATS would weigh hard skills, tools, seniority, and role fit. Return a JSON object EXACTLY like:
+
+{ "scores": [ { "id": string, "fitScore": number (0-100), "matchReason": string } ] }
+
+Rules:
+- Exactly one entry per job, echoing the given id EXACTLY.
+- Base the score on real overlap between the resume and the job; be discerning (spread scores, don't cluster them all high).
+- "matchReason": a terse phrase (<= 12 words) naming the strongest match or the biggest gap.
+- Output ONLY the JSON object. No markdown, no code fence, no commentary.
+
+RESUME (JSON):
+${JSON.stringify(master)}
+
+JOBS:
+${list}`
+}
+
 /** Cover letter generation. */
 export function coverLetterPrompt(
   master: MasterResume,
@@ -151,8 +182,7 @@ export function coverLetterPrompt(
 
 Use only facts present in the MASTER RESUME. Connect the candidate's real experience to the job's needs. Warm but professional; no clichés, no em dashes, no filler like "I am writing to apply". Do not invent metrics or employers.
 
-Return a JSON object EXACTLY like: { "coverLetter": string }
-Output ONLY that JSON object. No markdown, no code fence.
+Output ONLY the cover letter text itself — plain prose, ready to paste. No JSON, no markdown, no code fence, no preamble or sign-off notes.
 
 MASTER RESUME (JSON):
 ${JSON.stringify(master)}

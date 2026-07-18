@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "electron-vite build && electron-builder --dir",
     "dist:dmg": "electron-vite build && electron-builder",
-    "install:app": "pnpm dist && rm -rf \"$HOME/Applications/Resume Tailor.app\" && cp -R \"release/mac-arm64/Resume Tailor.app\" \"$HOME/Applications/\" && xattr -dr com.apple.quarantine \"$HOME/Applications/Resume Tailor.app\" && echo \"Installed to ~/Applications\""
+    "install:app": "pnpm dist && rm -rf \"$HOME/Applications/Resume Tailor.app\" && cp -R \"release/mac-arm64/Resume Tailor.app\" \"$HOME/Applications/\" && ([ -f .env ] && cp .env \"$HOME/Applications/Resume Tailor.app/Contents/Resources/.env\" || true) && xattr -dr com.apple.quarantine \"$HOME/Applications/Resume Tailor.app\" && echo \"Installed to ~/Applications\""
   },
   "build": {
     "appId": "dev.codebyram.resume-tailor",

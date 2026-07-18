@@ -129,8 +129,10 @@ export function runClaude(prompt: string, opts: RunOptions = {}): Promise<Claude
 }
 
 /**
- * Run a prompt that must return JSON, and parse it. The model is instructed
- * (by the caller's prompt) to return only JSON; we defensively strip code fences.
+ * Run a prompt that must return JSON, and parse it — robustly. Models sometimes
+ * wrap JSON in prose or (when a prompt's input is thin) reply conversationally
+ * instead of with JSON. We strip fences, extract the outermost JSON block from
+ * mixed output, and retry ONCE with a stricter reminder before giving up.
  */
 export async function runClaudeJson<T = unknown>(
   prompt: string,
@@ -138,12 +140,69 @@ export async function runClaudeJson<T = unknown>(
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const r = await runClaude(prompt, opts)
   if (!r.ok) return { ok: false, error: r.error }
-  const cleaned = stripFences(r.text)
-  try {
-    return { ok: true, data: JSON.parse(cleaned) as T }
-  } catch {
-    return { ok: false, error: `Model did not return valid JSON:\n${r.text.slice(0, 800)}` }
+
+  const first = tryParseJson<T>(r.text)
+  if (first.ok) return { ok: true, data: first.value }
+
+  // Retry once, hammering home "JSON only" — handles the model asking questions.
+  const retry = await runClaude(
+    `${prompt}\n\nCRITICAL: Respond with ONLY the JSON. No prose, no questions, no markdown, no code fence. If information is missing, make reasonable choices — never ask.`,
+    opts
+  )
+  if (retry.ok) {
+    const second = tryParseJson<T>(retry.text)
+    if (second.ok) return { ok: true, data: second.value }
   }
+
+  return {
+    ok: false,
+    error: `The model didn't return usable data for this request. This often means the input (e.g. the job description) was too thin. Try again with more detail.`
+  }
+}
+
+function tryParseJson<T>(text: string): { ok: true; value: T } | { ok: false } {
+  const cleaned = stripFences(text)
+  try {
+    return { ok: true, value: JSON.parse(cleaned) as T }
+  } catch {
+    /* fall through to block extraction */
+  }
+  const block = extractJsonBlock(cleaned)
+  if (block) {
+    try {
+      return { ok: true, value: JSON.parse(block) as T }
+    } catch {
+      /* give up */
+    }
+  }
+  return { ok: false }
+}
+
+/** Extract the first balanced {...} or [...] block from mixed text. */
+function extractJsonBlock(s: string): string | null {
+  const start = s.search(/[{[]/)
+  if (start < 0) return null
+  const open = s[start]
+  const close = open === '{' ? '}' : ']'
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+      continue
+    }
+    if (ch === '"') inStr = true
+    else if (ch === open) depth++
+    else if (ch === close) {
+      depth--
+      if (depth === 0) return s.slice(start, i + 1)
+    }
+  }
+  return null
 }
 
 function stripFences(s: string): string {

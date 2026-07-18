@@ -5,6 +5,7 @@ import { join } from 'path'
 import { emptyMaster, type MasterResume, type ProfilesState } from '../shared/resume'
 import type { Application } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
+import type { JobResultsState } from '../shared/jobs'
 
 /**
  * Tiny file-backed store in the app's userData directory. No database, no native
@@ -21,6 +22,7 @@ const masterPath = (): string => join(dataDir(), 'master.json')
 const profilesPath = (): string => join(dataDir(), 'profiles.json')
 const appsPath = (): string => join(dataDir(), 'applications.json')
 const draftPath = (): string => join(dataDir(), 'draft.json')
+const jobResultsPath = (): string => join(dataDir(), 'job-results.json')
 
 function readJson<T>(path: string, fallback: T): T {
   if (!existsSync(path)) return fallback
@@ -101,4 +103,14 @@ export function deleteApplication(id: string): Application[] {
   const all = loadApplications().filter((a) => a.id !== id)
   writeJson(appsPath(), all)
   return all
+}
+
+// --- Job search results (last search, cached across restarts) --------------
+
+export function loadJobResults(): JobResultsState | null {
+  return readJson<JobResultsState | null>(jobResultsPath(), null)
+}
+
+export function saveJobResults(state: JobResultsState): void {
+  writeJson(jobResultsPath(), state)
 }
