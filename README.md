@@ -44,11 +44,25 @@ Everything is configured from the in-app **Settings** tab — there's no `.env` 
 ```bash
 pnpm typecheck     # type-check main + renderer
 pnpm dist          # build an unpacked .app into release/
-pnpm dist:dmg      # build a distributable installer
+pnpm dist:dmg      # build a distributable arm64 .dmg into release/
 pnpm install:app   # build and install into ~/Applications (macOS)
 ```
 
-> The `install:app` script builds the app, copies it to `~/Applications`, and clears the macOS quarantine flag so it opens without a Gatekeeper prompt (the build is unsigned).
+> The `install:app` script builds the app, copies it to `~/Applications`, and clears the macOS quarantine flag so it opens without a Gatekeeper prompt.
+
+### Code signing
+
+The build is **ad-hoc signed** (`build/afterPack.cjs`) — free, no Apple account, and it never expires. This is enough for the app to run reliably on Apple Silicon, but it is **not** notarized, so anyone who *downloads* the DMG has to get past Gatekeeper once: **System Settings → Privacy & Security → Open Anyway**, or `xattr -dr com.apple.quarantine "/Applications/Resume Tailor.app"`. Removing that first-run prompt entirely requires a paid Apple Developer ID ($99/yr) + notarization, which this project intentionally skips.
+
+### Releases (CI)
+
+- **CI** (`.github/workflows/ci.yml`) runs typecheck + build on every push and PR.
+- **Release** (`.github/workflows/release.yml`) builds the arm64 DMG on a macOS runner and publishes it to a GitHub Release when you push a version tag:
+
+  ```bash
+  git tag v0.1.0
+  git push origin v0.1.0
+  ```
 
 ## Project structure
 

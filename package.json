@@ -28,8 +28,14 @@
     "asarUnpack": [
       "**/node_modules/@anthropic-ai/**"
     ],
+    "afterPack": "build/afterPack.cjs",
     "mac": {
-      "target": "dir",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        }
+      ],
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
       "identity": null
