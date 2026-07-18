@@ -29,7 +29,9 @@ import {
   loadDraft,
   saveDraft,
   loadJobResults,
-  saveJobResults
+  saveJobResults,
+  loadSettings,
+  saveSettings
 } from './store'
 import {
   importPrompt,
@@ -40,14 +42,13 @@ import {
 } from './prompts'
 import { exportHtmlToPdf } from './pdf'
 import { AgentSession } from './agent'
-import { loadEnvFile } from './config'
+import { getTailorModel } from './config'
 import { searchDice, scoreJobLeads } from './jobs'
 import type { MasterResume, ProfilesState } from '../shared/resume'
 import type { Application, KeywordGap } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
-
-const TAILOR_MODEL = process.env.TAILOR_MODEL // undefined -> claude.ts default
+import type { AppSettings } from '../shared/settings'
 
 /** Defensively strip a stray ``` code fence around plain-text model output. */
 function stripCoverFences(s: string): string {
@@ -94,8 +95,12 @@ function createWindow(): BrowserWindow {
 }
 
 function registerIpc(): void {
-  // Load .env (APIFY_TOKEN etc.) into process.env for this run.
-  loadEnvFile()
+  // App settings (API keys entered from the UI)
+  ipcMain.handle('settings:load', () => loadSettings())
+  ipcMain.handle('settings:save', (_e, settings: AppSettings) => {
+    saveSettings(settings)
+    return true
+  })
 
   // Connection check
   ipcMain.handle('claude:ping', () =>
@@ -109,7 +114,7 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('master:import', (_e, resumeText: string) =>
-    runClaudeJson<MasterResume>(importPrompt(resumeText), { model: TAILOR_MODEL })
+    runClaudeJson<MasterResume>(importPrompt(resumeText), { model: getTailorModel() })
   )
   // Pick a resume file and return its raw bytes; the renderer extracts text
   // (pdfjs/mammoth need a real DOM, which Chromium provides but Node does not).
@@ -144,15 +149,15 @@ function registerIpc(): void {
 
   // AI features
   ipcMain.handle('tailor:run', (_e, master: MasterResume, jd: string) =>
-    runClaudeJson<MasterResume>(tailorPrompt(master, jd), { model: TAILOR_MODEL })
+    runClaudeJson<MasterResume>(tailorPrompt(master, jd), { model: getTailorModel() })
   )
   ipcMain.handle('keywordgap:run', (_e, master: MasterResume, jd: string) =>
-    runClaudeJson(keywordGapPrompt(master, jd), { model: TAILOR_MODEL })
+    runClaudeJson(keywordGapPrompt(master, jd), { model: getTailorModel() })
   )
   ipcMain.handle(
     'suggest:run',
     (_e, current: MasterResume, jd: string, missing: string[], instructions?: string) =>
-      runClaudeJson(suggestPrompt(current, jd, missing, instructions), { model: TAILOR_MODEL })
+      runClaudeJson(suggestPrompt(current, jd, missing, instructions), { model: getTailorModel() })
   )
   ipcMain.handle(
     'coverletter:run',
@@ -160,7 +165,7 @@ function registerIpc(): void {
       // Cover letters are freeform prose — return plain text, not JSON (long
       // letters with newlines/quotes break JSON.parse).
       const r = await runClaude(coverLetterPrompt(master, jd, company, role), {
-        model: TAILOR_MODEL
+        model: getTailorModel()
       })
       if (!r.ok) return { ok: false, error: r.error }
       return { ok: true, data: { coverLetter: stripCoverFences(r.text).trim() } }

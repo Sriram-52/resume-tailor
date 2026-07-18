@@ -348,6 +348,15 @@ select:focus {
   color: var(--err);
   font-size: 12px;
 }
+.err-action {
+  margin-top: 8px;
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
 .spinner {
   display: inline-flex;
   align-items: center;

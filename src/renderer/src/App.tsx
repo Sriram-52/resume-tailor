@@ -6,9 +6,10 @@ import { MasterEditor } from './screens/MasterEditor'
 import { Tailor } from './screens/Tailor'
 import { Applications } from './screens/Applications'
 import { Discover } from './screens/Discover'
+import { Settings } from './screens/Settings'
 import type { JobLead } from '../../shared/jobs'
 
-type Tab = 'tailor' | 'discover' | 'applications' | 'master'
+type Tab = 'tailor' | 'discover' | 'applications' | 'master' | 'settings'
 
 export default function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('discover')
@@ -121,6 +122,9 @@ export default function App(): React.JSX.Element {
           <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
             Master resume
           </button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
+            Settings
+          </button>
         </nav>
 
         <div className="profile-box">
@@ -154,7 +158,12 @@ export default function App(): React.JSX.Element {
         </div>
         {/* Discover stays mounted so search results (which cost money) survive tab switches. */}
         <div hidden={tab !== 'discover'} className="tab-pane">
-          <Discover resume={active.resume} apps={apps} onTailorLead={openLeadInTailor} />
+          <Discover
+            resume={active.resume}
+            apps={apps}
+            onTailorLead={openLeadInTailor}
+            onOpenSettings={() => setTab('settings')}
+          />
         </div>
         {tab === 'applications' && (
           <Applications
@@ -170,6 +179,7 @@ export default function App(): React.JSX.Element {
             }}
           />
         )}
+        {tab === 'settings' && <Settings />}
         {tab === 'master' && (
           <MasterEditor
             master={active.resume}

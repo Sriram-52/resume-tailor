@@ -82,12 +82,15 @@ function matchedApp(apps: Application[], lead: JobLead): Application | undefined
 export function Discover({
   resume,
   apps,
-  onTailorLead
+  onTailorLead,
+  onOpenSettings
 }: {
   resume: MasterResume
   /** Tracker applications, so already-applied jobs are marked / hidden. */
   apps: Application[]
   onTailorLead: (lead: JobLead) => void
+  /** Jump to the Settings tab (e.g. to add a missing Apify token). */
+  onOpenSettings: () => void
 }): React.JSX.Element {
   const [filters, setFilters] = useState<JobSearchFilters>(() => ({
     ...defaultFilters(),
@@ -152,6 +155,22 @@ export function Discover({
   )
   const trackedCount = decorated.filter((d) => d.app).length
   const visible = hideTracked ? decorated.filter((d) => !d.app) : decorated
+  // The main process asks the user to add their token in Settings; when that's
+  // the error, offer a one-click jump there.
+  const needsToken = /apify token/i.test(error)
+
+  const errorBox = (
+    <div className="err-box">
+      {error}
+      {needsToken && (
+        <div className="err-action">
+          <Button variant="ghost" onClick={onOpenSettings}>
+            Open Settings
+          </Button>
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="screen discover">
@@ -246,7 +265,7 @@ export function Discover({
                 {busy ? <Spinner text="Searching…" /> : 'Search'}
               </Button>
               <p className="muted disco-cost">Apify bills per result (~$3 / 1,000), capped at max.</p>
-              {error && <div className="err-box">{error}</div>}
+              {error && errorBox}
             </div>
           )}
         </div>
@@ -258,7 +277,7 @@ export function Discover({
             <Spinner text="Searching Dice…" />
           </div>
         )}
-        {!busy && error && <div className="err-box">{error}</div>}
+        {!busy && error && errorBox}
         {!busy && !error && leads === null && (
           <div className="disco-state muted">
             Open <b>Search / Filters</b> and run a search to see matching jobs here.

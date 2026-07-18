@@ -7,6 +7,7 @@ import type { KeywordGap } from '../shared/application'
 import type { ChatEvent } from '../shared/chat'
 import * as ops from './resumeOps'
 import { findClaudeBinary } from './claudeBin'
+import { getTailorModel } from './config'
 
 const CLAUDE_BIN = findClaudeBinary()
 
@@ -272,6 +273,7 @@ ${this.jd || '(none provided)'}
     this.busy = true
     this.cancelled = false
     const server = this.buildServer()
+    const model = getTailorModel()
 
     try {
       const iterator = query({
@@ -283,6 +285,7 @@ ${this.jd || '(none provided)'}
           systemPrompt: this.systemPrompt(),
           maxTurns: 40,
           cwd: cleanCwd(),
+          ...(model ? { model } : {}),
           ...(CLAUDE_BIN ? { pathToClaudeCodeExecutable: CLAUDE_BIN } : {}),
           ...(this.sessionId ? { resume: this.sessionId } : {})
         }

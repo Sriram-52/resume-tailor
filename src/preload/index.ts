@@ -4,6 +4,7 @@ import type { Application, KeywordGap, Suggestion } from '../shared/application'
 import type { ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
+import type { AppSettings } from '../shared/settings'
 
 export interface ClaudeResult {
   ok: boolean
@@ -27,6 +28,10 @@ export interface ExportResult {
 
 const api = {
   pingClaude: (): Promise<ClaudeResult> => ipcRenderer.invoke('claude:ping'),
+
+  loadSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:load'),
+  saveSettings: (settings: AppSettings): Promise<boolean> =>
+    ipcRenderer.invoke('settings:save', settings),
 
   loadProfiles: (): Promise<ProfilesState> => ipcRenderer.invoke('profiles:load'),
   saveProfiles: (state: ProfilesState): Promise<boolean> =>

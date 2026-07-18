@@ -1,6 +1,6 @@
 import type { MasterResume } from '../shared/resume'
 import type { EmploymentType, JobLead, JobSearchFilters } from '../shared/jobs'
-import { getApifyToken } from './config'
+import { getApifyToken, getTailorModel } from './config'
 import { runClaudeJson } from './claude'
 import { scoreJobsPrompt } from './prompts'
 
@@ -182,7 +182,10 @@ export interface JobSearchResult {
 export async function searchDice(filters: JobSearchFilters): Promise<JobSearchResult> {
   const token = getApifyToken()
   if (!token) {
-    return { ok: false, error: 'No Apify token. Add APIFY_TOKEN to your .env, then restart the app.' }
+    return {
+      ok: false,
+      error: 'No Apify token. Add your Apify API token in Settings, then run the search again.'
+    }
   }
   const searchUrl = buildDiceSearchUrl(filters)
   const maxResults = Math.max(1, Math.min(filters.maxResults || 30, 200))
@@ -197,7 +200,8 @@ export async function searchDice(filters: JobSearchFilters): Promise<JobSearchRe
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      if (res.status === 401) return { ok: false, error: 'Apify rejected the token (401). Check APIFY_TOKEN.' }
+      if (res.status === 401)
+        return { ok: false, error: 'Apify rejected the token (401). Check it in Settings.' }
       return { ok: false, error: `Apify returned ${res.status}. ${body.slice(0, 200)}` }
     }
     const items = (await res.json()) as unknown
@@ -238,7 +242,7 @@ export async function scoreJobLeads(
   }))
   const r = await runClaudeJson<{
     scores: { id: string; fitScore: number; matchReason: string }[]
-  }>(scoreJobsPrompt(resume, jobs), { model: process.env.TAILOR_MODEL })
+  }>(scoreJobsPrompt(resume, jobs), { model: getTailorModel() })
   if (!r.ok || !r.data?.scores) return { ok: false, error: r.error ?? 'Scoring failed.' }
 
   const byId = new Map(r.data.scores.map((s) => [String(s.id), s]))

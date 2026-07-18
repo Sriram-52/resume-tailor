@@ -15,6 +15,7 @@ Built with Electron, React, TypeScript, and Vite.
   - It has **web access** (WebSearch / WebFetch) to research a company or read a posting/portfolio URL you give it.
   - Replies render as Markdown.
 - **On-demand panels** — resume preview, ATS breakdown, cover letter, and the job description open only when you want them, so the chat stays front and center.
+- **Discover jobs** — search Dice.com (via Apify) from your active profile, scored against your resume with a per-result match gauge, and tailor any result in one click. Optional; requires an Apify token (see [Settings](#settings)).
 - **Multiple base resumes** — keep several profiles (e.g. "Full Stack", "Java"). Duplicate your untouchable default, iterate on a variant, and use **Update base** to promote a tailored version back into it.
 - **Applications tracker** — save tailored resumes, see their ATS score in a table, **Continue** a draft to keep editing (it restores the base profile it came from and updates the same record), and export to PDF.
 
@@ -30,6 +31,13 @@ Built with Electron, React, TypeScript, and Vite.
 pnpm install       # install dependencies
 pnpm dev           # run in development with hot reload
 ```
+
+## Settings
+
+Everything is configured from the in-app **Settings** tab — there's no `.env` and nothing to edit before building. Values are stored locally on your machine (in the app's `userData` dir) and are never bundled with the app, so it can be shipped as a DMG without embedding any secrets.
+
+- **Apify API token** — enables the **Discover** tab (job search via Dice.com). Get one at [console.apify.com/account/integrations](https://console.apify.com/account/integrations). Apify bills per result (~$3 / 1,000). Leave it blank if you don't use Discover; everything else works without it.
+- **Model** — which Claude model to use for tailoring, ATS analysis, cover letters, and chat (Sonnet 5 by default; Opus 4.8 or Haiku 4.5 also available). Runs on your Claude Code subscription, so pick a model your plan includes.
 
 ## Building
 
@@ -50,14 +58,16 @@ src/
     agent.ts       conversational resume-editing agent (Agent SDK)
     claude.ts      headless bridge to the Claude Code CLI (tailor, ATS, cover)
     claudeBin.ts   locates the bundled claude binary (works when packaged)
+    config.ts      reads settings (Apify token, model) from local storage
+    jobs.ts        job discovery + scoring (Dice.com via Apify)
     resumeOps.ts   pure resume-editing primitives the agent's tools call
     prompts.ts     prompts for tailoring / keyword gap / cover letter
-    store.ts       persistence (profiles, applications, draft)
+    store.ts       persistence (profiles, applications, draft, settings)
   preload/    typed IPC bridge exposed to the renderer as window.api
   renderer/   React UI
-    screens/       Tailor, Applications, MasterEditor, ChatPanel
+    screens/       Tailor, Discover, Applications, MasterEditor, ChatPanel, Settings
     templates.ts   resume HTML templates (used for preview + PDF)
-  shared/     types shared across processes (resume, application, draft, chat)
+  shared/     types shared across processes (resume, application, draft, chat, settings, jobs)
 ```
 
 ## How it works
