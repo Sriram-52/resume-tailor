@@ -6,6 +6,19 @@ Built with Electron, React, TypeScript, and Vite.
 
 ---
 
+## Download
+
+**[Download the latest release →](https://github.com/Sriram-52/resume-tailor/releases/latest)** — macOS (Apple Silicon).
+
+1. Grab the `.dmg` from the latest release, open it, and drag **Resume Tailor** to Applications.
+2. It's **ad-hoc signed** (free, not notarized), so macOS blocks the first launch. Open it once via **System Settings → Privacy & Security → Open Anyway**, or run:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Resume Tailor.app"
+   ```
+3. You'll need a **[Claude Code](https://claude.com/claude-code)** subscription logged in on this machine (see [Prerequisites](#prerequisites)).
+
+Prefer to build from source? Jump to [Getting started](#getting-started).
+
 ## What it does
 
 - **Tailor to a job** — paste a job description and it rewrites your master resume to match, then scores how well it aligns (ATS keyword-gap analysis: match score, missing keywords, terminology to align).
@@ -76,12 +89,12 @@ src/
     jobs.ts        job discovery + scoring (Dice.com via Apify)
     resumeOps.ts   pure resume-editing primitives the agent's tools call
     prompts.ts     prompts for tailoring / keyword gap / cover letter
-    store.ts       persistence (profiles, applications, draft, settings)
+    store.ts       persistence (profiles, applications, draft, settings, token usage)
   preload/    typed IPC bridge exposed to the renderer as window.api
   renderer/   React UI
-    screens/       Tailor, Discover, Applications, MasterEditor, ChatPanel, Settings
-    templates.ts   resume HTML templates (used for preview + PDF)
-  shared/     types shared across processes (resume, application, draft, chat, settings, jobs)
+    screens/       Tailor, Discover, Applications, MasterEditor, ChatPanel, MasterChatPanel, Settings
+    templates.ts   resume + cover-letter HTML templates (used for preview + PDF)
+  shared/     types shared across processes (resume, application, draft, chat, settings, jobs, usage)
 ```
 
 ## How it works
