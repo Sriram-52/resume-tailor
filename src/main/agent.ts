@@ -8,6 +8,7 @@ import type { ChatEvent } from '../shared/chat'
 import * as ops from './resumeOps'
 import { findClaudeBinary } from './claudeBin'
 import { getTailorModel } from './config'
+import { recordUsage } from './store'
 
 const CLAUDE_BIN = findClaudeBinary()
 
@@ -37,6 +38,30 @@ const TOOL_NAMES = [
 ]
 
 /**
+ * Extra tools available only when editing the MASTER resume. These add whole
+ * new sections (roles, education, certifications, publications) — things the
+ * tailoring agent is barred from, but which are the point on the user's own
+ * master.
+ */
+const MASTER_TOOL_NAMES = [
+  'add_role',
+  'edit_role',
+  'remove_role',
+  'add_education',
+  'remove_education',
+  'add_certification',
+  'remove_certification',
+  'add_publication',
+  'remove_publication'
+]
+
+/** Cover-letter tools, available only when tailoring (there's a target job). */
+const COVER_TOOL_NAMES = ['get_cover_letter', 'set_cover_letter']
+
+/** Which resume an AgentSession targets: the tailored working copy, or the master. */
+export type AgentMode = 'tailor' | 'master'
+
+/**
  * Built-in Claude Code tools we auto-allow alongside the resume tools. Listing a
  * tool here bypasses the interactive permission prompt — which the app has no way
  * to answer in this headless Electron context, so an unlisted tool call just comes
@@ -55,6 +80,12 @@ export class AgentSession {
   private jd: string
   private gap: KeywordGap | null
   private win: BrowserWindow
+  private mode: AgentMode
+  // Cover-letter context (tailor mode only): the current draft the agent can
+  // read/rewrite, plus the target company/role for framing.
+  private cover = ''
+  private company = ''
+  private role = ''
   private sessionId: string | null = null
   private cancelled = false
   private busy = false
@@ -64,7 +95,8 @@ export class AgentSession {
     resume: MasterResume,
     jd: string,
     gap: KeywordGap | null = null,
-    master: MasterResume = resume
+    master: MasterResume = resume,
+    mode: AgentMode = 'tailor'
   ) {
     this.win = win
     this.resume = resume
@@ -73,10 +105,27 @@ export class AgentSession {
     this.master = master
     this.jd = jd
     this.gap = gap
+    this.mode = mode
   }
 
   getResume(): MasterResume {
     return this.resume
+  }
+
+  /**
+   * Re-seed the resume the agent edits. Used by the master editor so each turn
+   * operates on the latest saved master (the user may have hand-edited the form
+   * between turns). Ignored mid-turn so an in-flight edit isn't clobbered.
+   */
+  setResume(r: MasterResume): void {
+    if (this.busy) return
+    this.resume = r
+    if (this.mode === 'master') this.master = r
+  }
+
+  /** IPC channel this session streams events on (kept distinct per mode). */
+  private get channel(): string {
+    return this.mode === 'master' ? 'masterchat:event' : 'chat:event'
   }
 
   /** Update the ATS analysis the agent sees (e.g. after a re-scan). */
@@ -84,8 +133,20 @@ export class AgentSession {
     this.gap = gap
   }
 
+  /** Target company/role, for framing a cover letter written through chat. */
+  setJobMeta(company: string, role: string): void {
+    this.company = company
+    this.role = role
+  }
+
+  /** Keep the agent's view of the cover-letter draft in sync with the UI. */
+  setCover(cover: string): void {
+    if (this.busy) return
+    this.cover = cover
+  }
+
   private emit(e: ChatEvent): void {
-    if (!this.win.isDestroyed()) this.win.webContents.send('chat:event', e)
+    if (!this.win.isDestroyed()) this.win.webContents.send(this.channel, e)
   }
 
   cancel(): void {
@@ -98,6 +159,13 @@ export class AgentSession {
       this.emit({ kind: 'resume', resume: this.resume })
     }
     return { content: [{ type: 'text', text: r.description }] }
+  }
+
+  /** Store a new cover-letter draft and stream it to the UI's Cover tab. */
+  private appliedCover(text: string): { content: { type: 'text'; text: string }[] } {
+    this.cover = text
+    this.emit({ kind: 'cover', cover: text })
+    return { content: [{ type: 'text', text: 'Updated the cover letter.' }] }
   }
 
   private buildServer(): ReturnType<typeof createSdkMcpServer> {
@@ -138,11 +206,19 @@ export class AgentSession {
         ),
         tool(
           'edit_bullet',
-          'Replace one experience bullet under a role. Match the existing bullet by its text.',
+          'Rewrite one experience bullet under a role. `before` only LOCATES the bullet to change; `after` REPLACES that entire bullet. `after` must be the COMPLETE new bullet sentence, never a fragment or only the changed words, or the bullet will be truncated.',
           {
             company: z.string(),
-            before: z.string().describe('Existing bullet text (may be a distinctive substring).'),
-            after: z.string().describe('The rewritten bullet.')
+            before: z
+              .string()
+              .describe(
+                'Text that identifies the existing bullet to change. A distinctive substring is enough to locate it; it is NOT the part being replaced.'
+              ),
+            after: z
+              .string()
+              .describe(
+                'The COMPLETE rewritten bullet — the full sentence as it should read. This overwrites the whole bullet, so include everything, not just the edited portion.'
+              )
           },
           async (a) => s.applied(ops.editBullet(s.resume, a.company, a.before, a.after))
         ),
@@ -223,9 +299,136 @@ export class AgentSession {
                 highlights: a.highlights
               })
             )
-        )
+        ),
+        ...(this.mode === 'master' ? this.masterTools() : []),
+        ...(this.mode === 'tailor' ? this.coverTools() : [])
       ]
     })
+  }
+
+  /** Cover-letter tools, available only in tailor mode (there's a JD to target). */
+  private coverTools() {
+    const s = this
+    return [
+      tool(
+        'get_cover_letter',
+        'Return the current cover-letter draft (empty string if none yet).',
+        {},
+        async () => ({ content: [{ type: 'text', text: s.cover || '(no cover letter yet)' }] })
+      ),
+      tool(
+        'set_cover_letter',
+        'Write or replace the ENTIRE cover letter. Use this whenever the user asks to write, rewrite, shorten, or refine their cover letter. Pass the full letter text (all paragraphs), not a diff. Base it on the resume and the target job; 250-350 words, warm but professional, no invented facts, no em dashes, and NO preamble (start directly with the greeting or opening sentence).',
+        { text: z.string().describe('The complete cover letter text.') },
+        async (a) => s.appliedCover(a.text)
+      )
+    ]
+  }
+
+  /** Tools registered only in master mode (whole-section add/remove). */
+  private masterTools() {
+    const s = this
+    return [
+      tool(
+        'add_role',
+        'Add a whole new work role/experience to the master resume. Use when the user says they started a new job or want a past role added.',
+        {
+          company: z.string(),
+          position: z.string().optional().describe('Job title.'),
+          location: z.string().optional(),
+          startDate: z.string().optional().describe('e.g. "Jan 2024".'),
+          endDate: z.string().optional().describe('Leave empty if current.'),
+          current: z.boolean().optional().describe('True if this is their current job.'),
+          highlights: z.array(z.string()).optional().describe('Accomplishment bullets.'),
+          tech: z.array(z.string()).optional().describe('Technologies used.')
+        },
+        async (a) => s.applied(ops.addRole(s.resume, a))
+      ),
+      tool(
+        'edit_role',
+        "Update an existing role's metadata (company, title, location, dates, current), located by company name. Use edit_bullet/add_bullet for its bullets.",
+        {
+          company: z.string().describe('Company used to locate the role.'),
+          newCompany: z.string().optional().describe('A new company name, if renaming.'),
+          position: z.string().optional(),
+          location: z.string().optional(),
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          current: z.boolean().optional()
+        },
+        async (a) =>
+          s.applied(
+            ops.editRole(s.resume, a.company, {
+              company: a.newCompany,
+              position: a.position,
+              location: a.location,
+              startDate: a.startDate,
+              endDate: a.endDate,
+              current: a.current
+            })
+          )
+      ),
+      tool(
+        'remove_role',
+        'Remove a whole role from the master resume, matched by company name.',
+        { company: z.string() },
+        async (a) => s.applied(ops.removeRole(s.resume, a.company))
+      ),
+      tool(
+        'add_education',
+        'Add an education entry (degree/school) to the master resume.',
+        {
+          institution: z.string(),
+          studyType: z.string().optional().describe('e.g. "B.S.", "M.S.".'),
+          area: z.string().optional().describe('Field of study.'),
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          gpa: z.string().optional(),
+          highlights: z.array(z.string()).optional()
+        },
+        async (a) => s.applied(ops.addEducation(s.resume, a))
+      ),
+      tool(
+        'remove_education',
+        'Remove an education entry, matched by institution name.',
+        { institution: z.string() },
+        async (a) => s.applied(ops.removeEducation(s.resume, a.institution))
+      ),
+      tool(
+        'add_certification',
+        'Add a certification/credential to the master resume.',
+        {
+          name: z.string(),
+          issuer: z.string().optional().describe('Issuing organization.'),
+          date: z.string().optional()
+        },
+        async (a) => s.applied(ops.addCertification(s.resume, a))
+      ),
+      tool(
+        'remove_certification',
+        'Remove a certification, matched by name.',
+        { name: z.string() },
+        async (a) => s.applied(ops.removeCertification(s.resume, a.name))
+      ),
+      tool(
+        'add_publication',
+        'Add a publication to the master resume.',
+        {
+          title: z.string(),
+          venue: z.string().optional().describe('Journal, conference, or publisher.'),
+          date: z.string().optional(),
+          url: z.string().optional(),
+          description: z.string().optional()
+        },
+        async (a) => s.applied(ops.addPublication(s.resume, a))
+      ),
+      tool(
+        'remove_publication',
+        'Remove a publication, matched by title.',
+        { title: z.string() },
+        async (a) => s.applied(ops.removePublication(s.resume, a.title))
+      )
+    ]
   }
 
   private atsSection(): string {
@@ -246,22 +449,39 @@ When the user asks to improve the match or raise the score, just make the edits:
   }
 
   private systemPrompt(): string {
+    if (this.mode === 'master') return this.masterSystemPrompt()
     return `You are an expert resume editor embedded in a desktop app. You help the user tailor and refine their resume through conversation.
 
 - There are TWO resumes: the WORKING resume (get_resume) — the tailored version currently shown and being edited — and the full MASTER resume (get_master) — the complete superset of everything the candidate has done. Tailoring trims the master down to the working resume, so the working copy often has FEWER projects, roles, or bullets than the master.
 - Before answering "what do I have?" questions (e.g. "what projects can we swap in?"), or whenever the user wants to add/swap/restore content, call get_master — never assume the working resume is everything. To swap a project, read the master, then add_project (with the real details from the master) and remove_project as needed.
-- When the user asks for a change, make it directly with the provided tools. Do NOT ask for permission or confirmation first, and do NOT re-ask once the intent is clear — just do it. Prefer targeted edits (edit_bullet, set_summary, retitle_role, etc.).
+- When the user asks for a change, make it directly with the provided tools. Do NOT ask for permission or confirmation first, and do NOT re-ask once the intent is clear — just do it. Prefer targeted edits (edit_bullet, set_summary, retitle_role, etc.). When you edit_bullet, the "after" value must be the ENTIRE rewritten bullet (the full sentence), never just the changed words, or the bullet gets truncated.
 - You can edit every part of the resume: summary, headline, role titles, bullets, skill groups, a role's tech tags/chips (set_role_tech), header contact links — website/linkedin/github/email/phone/location (set_contact), and projects (add_project, remove_project, edit_project). Never tell the user you can't reach one of these — use the matching tool.
 - You have web access: use WebSearch to research a company or role, and WebFetch to read a job posting, portfolio, or GitHub URL the user gives you (e.g. to confirm a project's real tech stack before writing it up). Prefer fetching a URL the user provides over guessing.
 - This is the USER'S resume and they decide how to present their own experience. When they ask for a change — rewording, retitling, relabeling or remapping technologies (e.g. "remap everything to AWS", "swap GCP for AWS"), swapping projects, adjusting tech tags, anything — just DO it, fully, with the tools. Do NOT refuse, do NOT lecture, do NOT hedge, and do NOT add warnings about accuracy, honesty, or "faking it." No moralizing, ever. If they say remap to AWS, go through the summary, bullets, skills, and tech tags and make the swaps.
 - The only thing you don't do on your OWN initiative (when not asked) is invent whole new employers, job dates, or degrees from nothing. Everything the user explicitly asks for, you do without pushback.
-- Keep replies SHORT: one or two lines saying what you changed. Never write an essay, never explain your reasoning about honesty, never output empty bullets. The user sees edits reflected live.
+- You can also write and refine the COVER LETTER for this job. When the user asks to write, rewrite, shorten, lengthen, or adjust their cover letter, use set_cover_letter with the FULL letter text (call get_cover_letter first if you need the current draft). Base it on the resume and the job below, 250-350 words, warm but professional, no invented facts, no em dashes, and start directly with the greeting/opening (no "here is your cover letter" preamble). The letter appears in the app's Cover letter tab.
+- Keep replies SHORT: one or two lines saying what you changed. Never write an essay, never explain your reasoning about honesty, never output empty bullets. The user sees edits reflected live. For a cover letter, put the letter in set_cover_letter, not in the chat reply.
 - NEVER use em dashes (the "—" character) anywhere, in resume text or in chat replies. Use commas, periods, colons, or parentheses instead.
-
+${this.company || this.role ? `\nThis application targets: ${[this.role, this.company].filter(Boolean).join(' at ')}.\n` : ''}
 The job description the user is targeting:
 """
 ${this.jd || '(none provided)'}
 """${this.atsSection()}`
+  }
+
+  private masterSystemPrompt(): string {
+    return `You are an expert resume editor embedded in a desktop app. You help the user maintain their MASTER resume through conversation.
+
+- The master resume is the user's full career superset: everything they have ever done. Tailoring later trims this down per job, so the master should be COMPLETE and detailed, not trimmed. Err toward keeping content.
+- Call get_resume to read the current master before editing. There is no separate "working" copy here: get_resume and get_master both return the master.
+- When the user asks for a change, make it directly with the tools. Do NOT ask for permission or confirmation, and do NOT re-ask once the intent is clear. Prefer targeted edits.
+- You can edit everything: summary, headline, role titles, bullets, skill groups, a role's tech tags (set_role_tech), contact fields (set_contact), and projects. You can ALSO add/remove whole sections that tailoring can't: add_role / edit_role / remove_role, add_education / remove_education, add_certification / remove_certification, add_publication / remove_publication.
+- Common requests: "I built a new project X" -> add_project with the details. "I started a new job at Y" -> add_role. "Rewrite my summary" -> set_summary. "Add my AWS cert" -> add_certification.
+- This is the USER'S resume and they decide what goes in it. When they give you real details about a new job, project, degree, or credential, add it exactly as described. Ask a brief clarifying question ONLY if you genuinely lack a required detail (e.g. the company name); otherwise fill in what they gave and use sensible empty defaults for the rest.
+- Do NOT fabricate employers, dates, degrees, or credentials that the user did not give you. Add what they tell you; don't invent specifics.
+- You have web access: use WebFetch to read a project/portfolio/GitHub URL the user pastes (e.g. to write up a project's real tech stack), and WebSearch when helpful.
+- Keep replies SHORT: one or two lines saying what you changed. The user sees edits reflected live in the form. Every applied edit is saved automatically.
+- NEVER use em dashes (the "—" character) anywhere. Use commas, periods, colons, or parentheses instead.`
   }
 
   /** Run one user turn. Streams text + edits; resolves when the turn completes. */
@@ -281,7 +501,13 @@ ${this.jd || '(none provided)'}
         options: {
           includePartialMessages: true,
           mcpServers: { resume: server },
-          allowedTools: [...TOOL_NAMES.map((n) => `mcp__resume__${n}`), ...WEB_TOOLS],
+          allowedTools: [
+            ...TOOL_NAMES.map((n) => `mcp__resume__${n}`),
+            ...(this.mode === 'master'
+              ? MASTER_TOOL_NAMES.map((n) => `mcp__resume__${n}`)
+              : COVER_TOOL_NAMES.map((n) => `mcp__resume__${n}`)),
+            ...WEB_TOOLS
+          ],
           systemPrompt: this.systemPrompt(),
           maxTurns: 40,
           cwd: cleanCwd(),
@@ -305,6 +531,19 @@ ${this.jd || '(none provided)'}
           }
         } else if (m.type === 'result') {
           this.sessionId = m.session_id ?? this.sessionId
+          const u = m.usage
+          if (u) {
+            recordUsage({
+              ts: new Date().toISOString(),
+              kind: this.mode === 'master' ? 'masterchat' : 'chat',
+              model: model ?? '',
+              inputTokens: u.input_tokens ?? 0,
+              outputTokens: u.output_tokens ?? 0,
+              cacheReadTokens: u.cache_read_input_tokens ?? 0,
+              cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+              costUsd: m.total_cost_usd ?? 0
+            })
+          }
         }
       }
       this.emit({ kind: 'turn-done' })
@@ -333,6 +572,17 @@ function friendlyTool(name: string): string {
     add_project: 'Adding a project…',
     remove_project: 'Removing a project…',
     edit_project: 'Editing a project…',
+    get_cover_letter: 'Reading the cover letter…',
+    set_cover_letter: 'Writing the cover letter…',
+    add_role: 'Adding a role…',
+    edit_role: 'Updating a role…',
+    remove_role: 'Removing a role…',
+    add_education: 'Adding education…',
+    remove_education: 'Removing education…',
+    add_certification: 'Adding a certification…',
+    remove_certification: 'Removing a certification…',
+    add_publication: 'Adding a publication…',
+    remove_publication: 'Removing a publication…',
     WebSearch: 'Searching the web…',
     WebFetch: 'Reading a page…'
   }

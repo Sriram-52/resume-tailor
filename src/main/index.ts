@@ -4,6 +4,19 @@ import { mkdirSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import { readFile } from 'fs/promises'
 
+/**
+ * Build variant, baked in by electron.vite.config (`__APP_VARIANT__`). A packaged
+ * 'dev' build — and any unpackaged run (`pnpm dev`) — is renamed and pointed at a
+ * separate userData dir so it can live beside the prod install without sharing its
+ * settings, applications, or usage ledger. Must run before anything reads a path.
+ */
+declare const __APP_VARIANT__: string
+const VARIANT = app.isPackaged ? __APP_VARIANT__ : 'dev'
+if (VARIANT === 'dev') {
+  app.setName('Resume Tailor Dev')
+  app.setPath('userData', join(app.getPath('appData'), 'Resume Tailor Dev'))
+}
+
 // --- Crash diagnostics: capture anything that would silently kill the process.
 const CRASH_LOG = join(homedir(), 'resume-tailor-crash.log')
 function logCrash(kind: string, detail: unknown): void {
@@ -31,7 +44,9 @@ import {
   loadJobResults,
   saveJobResults,
   loadSettings,
-  saveSettings
+  saveSettings,
+  loadUsage,
+  resetUsage
 } from './store'
 import {
   importPrompt,
@@ -57,8 +72,30 @@ function stripCoverFences(s: string): string {
   return m ? m[1] : t
 }
 
+/**
+ * Drop a conversational lead-in line the model sometimes emits before the letter
+ * (e.g. "Here is your cover letter:", "Sure! Here's a draft:") despite the prompt
+ * forbidding it. Only removes a first line that is clearly a preamble, so a real
+ * greeting/opening is never touched.
+ */
+function stripCoverPreamble(s: string): string {
+  const t = s.trim()
+  const nl = t.indexOf('\n')
+  const firstLine = (nl === -1 ? t : t.slice(0, nl)).trim()
+  const preamble =
+    /^(sure|certainly|of course|absolutely|here('?s| is| you go)|below is|i('| ?a|'?ve| ?have)\b.*|this is)\b.*/i
+  // A genuine letter opens with a greeting or a sentence, not a colon-terminated
+  // lead-in. Treat a short first line that matches the markers (and typically
+  // ends in ":") as a preamble to remove.
+  if (nl !== -1 && preamble.test(firstLine) && firstLine.length < 120) {
+    return t.slice(nl + 1).trim()
+  }
+  return t
+}
+
 let mainWindow: BrowserWindow | null = null
 let chatSession: AgentSession | null = null
+let masterSession: AgentSession | null = null
 
 function ensureDirs(): void {
   mkdirSync(join(app.getPath('userData'), 'claude-cwd'), { recursive: true })
@@ -72,7 +109,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    title: 'Resume Tailor',
+    title: app.getName(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -102,9 +139,18 @@ function registerIpc(): void {
     return true
   })
 
+  // Token usage tracking
+  ipcMain.handle('usage:load', () => loadUsage())
+  ipcMain.handle('usage:reset', () => {
+    resetUsage()
+    return true
+  })
+
   // Connection check
   ipcMain.handle('claude:ping', () =>
-    runClaude('Reply with ONLY this JSON and nothing else: {"ok": true, "from": "claude"}')
+    runClaude('Reply with ONLY this JSON and nothing else: {"ok": true, "from": "claude"}', {
+      kind: 'ping'
+    })
   )
 
   // Master resume profiles
@@ -114,7 +160,7 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('master:import', (_e, resumeText: string) =>
-    runClaudeJson<MasterResume>(importPrompt(resumeText), { model: getTailorModel() })
+    runClaudeJson<MasterResume>(importPrompt(resumeText), { model: getTailorModel(), kind: 'import' })
   )
   // Pick a resume file and return its raw bytes; the renderer extracts text
   // (pdfjs/mammoth need a real DOM, which Chromium provides but Node does not).
@@ -149,15 +195,18 @@ function registerIpc(): void {
 
   // AI features
   ipcMain.handle('tailor:run', (_e, master: MasterResume, jd: string) =>
-    runClaudeJson<MasterResume>(tailorPrompt(master, jd), { model: getTailorModel() })
+    runClaudeJson<MasterResume>(tailorPrompt(master, jd), { model: getTailorModel(), kind: 'tailor' })
   )
   ipcMain.handle('keywordgap:run', (_e, master: MasterResume, jd: string) =>
-    runClaudeJson(keywordGapPrompt(master, jd), { model: getTailorModel() })
+    runClaudeJson(keywordGapPrompt(master, jd), { model: getTailorModel(), kind: 'keywordgap' })
   )
   ipcMain.handle(
     'suggest:run',
     (_e, current: MasterResume, jd: string, missing: string[], instructions?: string) =>
-      runClaudeJson(suggestPrompt(current, jd, missing, instructions), { model: getTailorModel() })
+      runClaudeJson(suggestPrompt(current, jd, missing, instructions), {
+        model: getTailorModel(),
+        kind: 'suggest'
+      })
   )
   ipcMain.handle(
     'coverletter:run',
@@ -165,24 +214,40 @@ function registerIpc(): void {
       // Cover letters are freeform prose — return plain text, not JSON (long
       // letters with newlines/quotes break JSON.parse).
       const r = await runClaude(coverLetterPrompt(master, jd, company, role), {
-        model: getTailorModel()
+        model: getTailorModel(),
+        kind: 'cover'
       })
       if (!r.ok) return { ok: false, error: r.error }
-      return { ok: true, data: { coverLetter: stripCoverFences(r.text).trim() } }
+      return { ok: true, data: { coverLetter: stripCoverPreamble(stripCoverFences(r.text)) } }
     }
   )
 
   // Conversational agent (chat)
   ipcMain.handle(
     'chat:start',
-    (_e, resume: MasterResume, jd: string, gap: KeywordGap | null, master: MasterResume) => {
+    (
+      _e,
+      resume: MasterResume,
+      jd: string,
+      gap: KeywordGap | null,
+      master: MasterResume,
+      company?: string,
+      role?: string,
+      cover?: string
+    ) => {
       if (!mainWindow) return false
       chatSession = new AgentSession(mainWindow, resume, jd, gap ?? null, master ?? resume)
+      chatSession.setJobMeta(company ?? '', role ?? '')
+      chatSession.setCover(cover ?? '')
       return true
     }
   )
   ipcMain.handle('chat:setGap', (_e, gap: KeywordGap | null) => {
     chatSession?.setGap(gap ?? null)
+    return true
+  })
+  ipcMain.handle('chat:setCover', (_e, cover: string) => {
+    chatSession?.setCover(cover ?? '')
     return true
   })
   ipcMain.handle('chat:send', async (_e, text: string) => {
@@ -195,6 +260,27 @@ function registerIpc(): void {
     return true
   })
   ipcMain.handle('chat:getResume', () => chatSession?.getResume() ?? null)
+
+  // Conversational agent for the MASTER resume (separate session + channel so it
+  // never collides with the tailoring chat, which stays mounted on another tab).
+  ipcMain.handle('masterchat:start', (_e, master: MasterResume) => {
+    if (!mainWindow) return false
+    masterSession = new AgentSession(mainWindow, master, '', null, master, 'master')
+    return true
+  })
+  ipcMain.handle('masterchat:send', async (_e, text: string, master: MasterResume) => {
+    if (!masterSession) return { ok: false, error: 'No master session. Open the Master resume tab.' }
+    // Re-seed with the latest master each turn, in case the user hand-edited the
+    // form since the last message.
+    if (master) masterSession.setResume(master)
+    await masterSession.send(text)
+    return { ok: true }
+  })
+  ipcMain.handle('masterchat:cancel', () => {
+    masterSession?.cancel()
+    return true
+  })
+  ipcMain.handle('masterchat:getResume', () => masterSession?.getResume() ?? null)
 
   // Job discovery
   ipcMain.handle('jobs:search', (_e, filters: JobSearchFilters) => searchDice(filters))

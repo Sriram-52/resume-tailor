@@ -5,12 +5,20 @@ import type { ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 import type { AppSettings } from '../shared/settings'
+import type { UsageState } from '../shared/usage'
 
 export interface ClaudeResult {
   ok: boolean
   text: string
   error?: string
   durationMs?: number
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+    costUsd: number
+  }
 }
 
 export interface JsonResult<T> {
@@ -32,6 +40,9 @@ const api = {
   loadSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings: AppSettings): Promise<boolean> =>
     ipcRenderer.invoke('settings:save', settings),
+
+  loadUsage: (): Promise<UsageState> => ipcRenderer.invoke('usage:load'),
+  resetUsage: (): Promise<boolean> => ipcRenderer.invoke('usage:reset'),
 
   loadProfiles: (): Promise<ProfilesState> => ipcRenderer.invoke('profiles:load'),
   saveProfiles: (state: ProfilesState): Promise<boolean> =>
@@ -81,10 +92,16 @@ const api = {
     m: MasterResume,
     jd: string,
     gap: KeywordGap | null,
-    master: MasterResume
-  ): Promise<boolean> => ipcRenderer.invoke('chat:start', m, jd, gap, master),
+    master: MasterResume,
+    company?: string,
+    role?: string,
+    cover?: string
+  ): Promise<boolean> =>
+    ipcRenderer.invoke('chat:start', m, jd, gap, master, company, role, cover),
   setChatGap: (gap: KeywordGap | null): Promise<boolean> =>
     ipcRenderer.invoke('chat:setGap', gap),
+  setChatCover: (cover: string): Promise<boolean> =>
+    ipcRenderer.invoke('chat:setCover', cover),
 
   // Job discovery
   searchJobs: (
@@ -108,6 +125,21 @@ const api = {
     const handler = (_e: unknown, data: ChatEvent): void => cb(data)
     ipcRenderer.on('chat:event', handler)
     return () => ipcRenderer.removeListener('chat:event', handler)
+  },
+
+  // Conversational agent for the master resume
+  startMasterChat: (master: MasterResume): Promise<boolean> =>
+    ipcRenderer.invoke('masterchat:start', master),
+  sendMasterChat: (text: string, master: MasterResume): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('masterchat:send', text, master),
+  cancelMasterChat: (): Promise<boolean> => ipcRenderer.invoke('masterchat:cancel'),
+  getMasterChatResume: (): Promise<MasterResume | null> =>
+    ipcRenderer.invoke('masterchat:getResume'),
+  /** Subscribe to streaming master-chat events. Returns an unsubscribe function. */
+  onMasterChatEvent: (cb: (e: ChatEvent) => void): (() => void) => {
+    const handler = (_e: unknown, data: ChatEvent): void => cb(data)
+    ipcRenderer.on('masterchat:event', handler)
+    return () => ipcRenderer.removeListener('masterchat:event', handler)
   }
 }
 

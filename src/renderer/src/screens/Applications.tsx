@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Application, ApplicationStatus } from '../../../shared/application'
-import { getTemplate } from '../templates'
+import { getTemplate, renderCoverLetter } from '../templates'
 import { Button } from '../ui'
 
 const STATUSES: ApplicationStatus[] = [
@@ -56,6 +56,21 @@ export function Applications({
   async function exportOne(a: Application): Promise<void> {
     const html = getTemplate(a.template).render(a.tailored)
     const name = `${a.tailored.basics.name.replace(/\s+/g, '_')}_${a.company.replace(/\s+/g, '_')}.pdf`
+    await window.api.exportPdf(html, name)
+  }
+
+  async function exportCover(a: Application): Promise<void> {
+    if (!a.coverLetter) return
+    const html = renderCoverLetter(a.tailored, a.coverLetter, {
+      company: a.company,
+      role: a.role,
+      date: new Date().toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    })
+    const name = `${a.tailored.basics.name.replace(/\s+/g, '_')}_${a.company.replace(/\s+/g, '_')}_cover.pdf`
     await window.api.exportPdf(html, name)
   }
 
@@ -164,7 +179,12 @@ export function Applications({
             </div>
             {selected.coverLetter && (
               <>
-                <h4>Cover letter</h4>
+                <div className="row space">
+                  <h4>Cover letter</h4>
+                  <Button variant="ghost" onClick={() => exportCover(selected)}>
+                    Export PDF
+                  </Button>
+                </div>
                 <pre className="cover-pre">{selected.coverLetter}</pre>
               </>
             )}

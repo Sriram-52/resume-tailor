@@ -7,6 +7,13 @@ import type { Application } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobResultsState } from '../shared/jobs'
 import { emptySettings, type AppSettings } from '../shared/settings'
+import {
+  emptyTotals,
+  emptyUsage,
+  type UsageEntry,
+  type UsageState,
+  type UsageTotals
+} from '../shared/usage'
 
 /**
  * Tiny file-backed store in the app's userData directory. No database, no native
@@ -25,6 +32,7 @@ const appsPath = (): string => join(dataDir(), 'applications.json')
 const draftPath = (): string => join(dataDir(), 'draft.json')
 const jobResultsPath = (): string => join(dataDir(), 'job-results.json')
 const settingsPath = (): string => join(dataDir(), 'settings.json')
+const usagePath = (): string => join(dataDir(), 'usage.json')
 
 function readJson<T>(path: string, fallback: T): T {
   if (!existsSync(path)) return fallback
@@ -125,4 +133,43 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   writeJson(settingsPath(), settings)
+}
+
+// --- Token usage tracking (aggregated across all LLM calls) ----------------
+
+/** Keep only the most recent calls in the ledger; totals are never truncated. */
+const RECENT_CAP = 100
+
+export function loadUsage(): UsageState {
+  const s = readJson<Partial<UsageState>>(usagePath(), {})
+  return {
+    totals: { ...emptyTotals(), ...s.totals },
+    byKind: s.byKind ?? {},
+    recent: Array.isArray(s.recent) ? s.recent : []
+  }
+}
+
+function addInto(t: UsageTotals, e: UsageEntry): UsageTotals {
+  return {
+    calls: t.calls + 1,
+    inputTokens: t.inputTokens + e.inputTokens,
+    outputTokens: t.outputTokens + e.outputTokens,
+    cacheReadTokens: t.cacheReadTokens + e.cacheReadTokens,
+    cacheCreationTokens: t.cacheCreationTokens + e.cacheCreationTokens,
+    costUsd: t.costUsd + e.costUsd
+  }
+}
+
+/** Append one LLM call to the ledger, updating the running totals + breakdown. */
+export function recordUsage(e: UsageEntry): void {
+  const state = loadUsage()
+  state.totals = addInto(state.totals, e)
+  state.byKind[e.kind] = addInto(state.byKind[e.kind] ?? emptyTotals(), e)
+  state.recent.unshift(e)
+  if (state.recent.length > RECENT_CAP) state.recent.length = RECENT_CAP
+  writeJson(usagePath(), state)
+}
+
+export function resetUsage(): void {
+  writeJson(usagePath(), emptyUsage())
 }

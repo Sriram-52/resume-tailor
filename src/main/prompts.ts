@@ -182,7 +182,11 @@ export function coverLetterPrompt(
 
 Use only facts present in the MASTER RESUME. Connect the candidate's real experience to the job's needs. Warm but professional; no clichés, no em dashes, no filler like "I am writing to apply". Do not invent metrics or employers.
 
-Output ONLY the cover letter text itself — plain prose, ready to paste. No JSON, no markdown, no code fence, no preamble or sign-off notes.
+CRITICAL OUTPUT RULES:
+- Your ENTIRE response is the cover letter and nothing else.
+- Begin DIRECTLY with the letter (the greeting like "Dear Hiring Manager," or the opening sentence).
+- Do NOT begin with any preamble, lead-in, or meta commentary such as "Here is your cover letter", "Here's a draft", "Sure", "Certainly", "Below is", or similar. The first characters of your response must be the letter itself.
+- No JSON, no markdown, no code fence, no notes before or after the letter.
 
 MASTER RESUME (JSON):
 ${JSON.stringify(master)}

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MasterResume } from '../../../shared/resume'
-import type { KeywordGap } from '../../../shared/application'
 import { Button, Spinner } from '../ui'
 import { Markdown } from '../markdown'
 
@@ -10,39 +9,20 @@ interface Msg {
 }
 
 /**
- * Conversational editor. The user types plain-English requests ("make the summary
- * 3 sentences", "retitle Acme to Staff Engineer"); the agent edits the resume
- * through tools and streams what it's doing. Applied edits arrive as 'resume'
- * events and are pushed up so the live preview updates.
+ * Conversational editor for the MASTER resume. The user describes real changes
+ * ("I built a project called X", "add my AWS cert", "I started a job at Y") and
+ * the agent edits the master through tools, streaming what it does. Each applied
+ * edit arrives as a 'resume' event and is pushed up via onApply, which persists
+ * it immediately (auto-save). Runs on a separate agent session/channel from the
+ * tailoring chat, so the two never interfere.
  */
-export function ChatPanel({
-  resume,
+export function MasterChatPanel({
   master,
-  jd,
-  gap,
-  onResume,
-  company = '',
-  role = '',
-  cover = '',
-  onCover,
-  hero = false
+  onApply
 }: {
-  resume: MasterResume
-  /** The full master resume (superset) so the agent can pull back trimmed content. */
   master: MasterResume
-  jd: string
-  /** Current ATS analysis, so the agent can prioritize raising the score. */
-  gap: KeywordGap | null
-  onResume: (r: MasterResume) => void
-  /** Target company/role, so the agent can frame a cover letter written in chat. */
-  company?: string
-  role?: string
-  /** Current cover-letter draft, kept in sync so chat edits build on it. */
-  cover?: string
-  /** Called when the agent writes/updates the cover letter through chat. */
-  onCover?: (text: string) => void
-  /** When true, the panel fills its container and the log grows to fit (chat-as-hero). */
-  hero?: boolean
+  /** Persist an AI-applied edit to the active profile (auto-save). */
+  onApply: (r: MasterResume) => void
 }): React.JSX.Element {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -52,7 +32,17 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Grow the input to fit its content (up to a cap), so it never needs manual resizing.
+  // Keep the latest master + callback in refs so the once-subscribed event
+  // handler and send() never close over stale values.
+  const masterRef = useRef(master)
+  const onApplyRef = useRef(onApply)
+  useEffect(() => {
+    masterRef.current = master
+  }, [master])
+  useEffect(() => {
+    onApplyRef.current = onApply
+  }, [onApply])
+
   function autosize(): void {
     const el = inputRef.current
     if (!el) return
@@ -60,23 +50,19 @@ export function ChatPanel({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }
 
-  // Start a fresh agent session for this resume, and subscribe to its stream.
   useEffect(() => {
-    let unsub = (): void => {}
     ;(async () => {
-      await window.api.startChat(resume, jd, gap, master, company, role, cover)
+      await window.api.startMasterChat(masterRef.current)
       setReady(true)
     })()
 
-    unsub = window.api.onChatEvent((e) => {
+    const unsub = window.api.onMasterChatEvent((e) => {
       if (e.kind === 'text') {
         setMessages((m) => appendToAssistant(m, e.text))
       } else if (e.kind === 'status') {
         setStatus(e.text)
       } else if (e.kind === 'resume') {
-        onResume(e.resume)
-      } else if (e.kind === 'cover') {
-        onCover?.(e.cover)
+        onApplyRef.current(e.resume)
       } else if (e.kind === 'turn-done') {
         setBusy(false)
         setStatus('')
@@ -94,17 +80,6 @@ export function ChatPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages, status])
 
-  // Keep the agent's view of the ATS score current as the user re-scans.
-  useEffect(() => {
-    if (ready) window.api.setChatGap(gap)
-  }, [gap, ready])
-
-  // Keep the agent's view of the cover-letter draft current (e.g. after the
-  // one-click Generate button, or manual edits), so chat refinements build on it.
-  useEffect(() => {
-    if (ready) window.api.setChatCover(cover)
-  }, [cover, ready])
-
   async function send(): Promise<void> {
     const text = input.trim()
     if (!text || busy || !ready) return
@@ -112,30 +87,29 @@ export function ChatPanel({
     setBusy(true)
     setStatus('')
     setMessages((m) => [...m, { role: 'user', text }, { role: 'assistant', text: '' }])
-    // Collapse the input back to one line now that it's cleared.
     requestAnimationFrame(autosize)
-    await window.api.sendChat(text)
+    // Pass the current master so the agent always edits the latest saved copy.
+    await window.api.sendMasterChat(text, masterRef.current)
   }
 
   function cancel(): void {
-    window.api.cancelChat()
+    window.api.cancelMasterChat()
     setBusy(false)
     setStatus('')
   }
 
   return (
-    <div className={`panel chat ${hero ? 'chat-hero' : ''}`}>
-      <div className="row space">
-        <h3>Chat with your resume</h3>
-        {!ready && <span className="muted">connecting…</span>}
-      </div>
+    <div className="panel chat">
       <p className="muted">
-        Ask for anything: "tighten the summary to 3 sentences". Edits apply live.
+        Describe real changes and they&apos;re applied to the fields below and saved automatically:
+        &quot;I built a project called PromptForge&quot;, &quot;add my AWS Solutions Architect
+        cert&quot;, &quot;I started a new role at Acme in March&quot;, &quot;rewrite my summary to
+        emphasize AI work&quot;.
       </p>
 
       <div className="chat-log" ref={scrollRef}>
         {messages.length === 0 && (
-          <div className="chat-empty">Type a request below to start editing by conversation.</div>
+          <div className="chat-empty">Tell the assistant what to add or change.</div>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`chat-msg chat-${m.role}`}>
@@ -167,7 +141,7 @@ export function ChatPanel({
             setInput(e.target.value)
             autosize()
           }}
-          placeholder={ready ? 'Message the agent…' : 'Connecting…'}
+          placeholder={ready ? 'Tell the assistant what to update…' : 'Connecting…'}
           rows={1}
           disabled={!ready}
           onKeyDown={(e) => {

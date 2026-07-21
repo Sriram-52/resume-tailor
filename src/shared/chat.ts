@@ -5,5 +5,6 @@ export type ChatEvent =
   | { kind: 'text'; text: string }
   | { kind: 'status'; text: string }
   | { kind: 'resume'; resume: MasterResume }
+  | { kind: 'cover'; cover: string }
   | { kind: 'turn-done' }
   | { kind: 'error'; error: string }

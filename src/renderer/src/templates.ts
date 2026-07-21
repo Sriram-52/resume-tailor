@@ -298,3 +298,45 @@ export const templates: Template[] = [classic, modern]
 export function getTemplate(id: string): Template {
   return templates.find((t) => t.id === id) ?? templates[0]
 }
+
+/**
+ * Render a cover letter as a print-ready HTML document, using the same
+ * letterhead (name + contact) and serif styling as the Classic resume so the
+ * two read as a matched pair. The letter body is plain text: blank lines split
+ * paragraphs, single newlines become line breaks.
+ */
+export function renderCoverLetter(
+  r: MasterResume,
+  cover: string,
+  opts: { company?: string; role?: string; date?: string } = {}
+): string {
+  const paras = cover
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  const re = [opts.role, opts.company].filter((x): x is string => !!x).map(esc).join(' · ')
+  const metaBits = [opts.date ? esc(opts.date) : '', re ? `Re: ${re}` : ''].filter(Boolean)
+  return shell(
+    `
+    .wrap { padding: 4px 2px; }
+    header { text-align: center; margin-bottom: 18px; }
+    h1 { font-size: 20pt; margin: 0 0 2px; letter-spacing: 0.5px; }
+    .label { font-size: 11pt; color: #444; margin-bottom: 4px; }
+    .contact { font-size: 9pt; color: #333; }
+    .meta { font-size: 9.5pt; color: #555; margin-bottom: 16px; padding-bottom: 8px;
+            border-bottom: 1px solid #ccc; }
+    .body p { margin: 0 0 10px; line-height: 1.5; }
+    `,
+    `<div class="wrap">
+      <header>
+        <h1>${esc(r.basics.name)}</h1>
+        ${r.basics.label ? `<div class="label">${esc(r.basics.label)}</div>` : ''}
+        <div class="contact">${contactLine(r)}</div>
+      </header>
+      ${metaBits.length ? `<div class="meta">${metaBits.join('<span class="c-sep">·</span>')}</div>` : ''}
+      <div class="body">${paras || `<p>${esc(cover)}</p>`}</div>
+    </div>`
+  )
+}

@@ -1,4 +1,11 @@
-import type { MasterResume, ProjectItem, WorkItem } from '../shared/resume'
+import type {
+  CertificationItem,
+  EducationItem,
+  MasterResume,
+  ProjectItem,
+  PublicationItem,
+  WorkItem
+} from '../shared/resume'
 
 /**
  * Pure resume-editing operations. These are the primitives the conversational
@@ -199,4 +206,198 @@ export function editProject(
   if (patch.url !== undefined) p.url = patch.url
   if (patch.highlights !== undefined) p.highlights = patch.highlights
   return { resume: r, changed: true, description: `Updated the project "${p.name}".` }
+}
+
+// --- Master-only operations ------------------------------------------------
+// These add/remove whole sections the tailoring agent is deliberately barred
+// from (it may never invent employers, degrees, or credentials). On the user's
+// OWN master resume, adding them on request is the whole point of the feature.
+
+/** Add a whole new work role/experience. Missing fields default to empty. */
+export function addRole(
+  resume: MasterResume,
+  role: {
+    company: string
+    position?: string
+    location?: string
+    startDate?: string
+    endDate?: string
+    current?: boolean
+    highlights?: string[]
+    tech?: string[]
+  }
+): EditResult {
+  const r = clone(resume)
+  r.work.push({
+    company: role.company,
+    position: role.position ?? '',
+    location: role.location ?? '',
+    startDate: role.startDate ?? '',
+    endDate: role.endDate ?? '',
+    current: role.current ?? false,
+    highlights: role.highlights ?? [],
+    tech: role.tech ?? []
+  })
+  return { resume: r, changed: true, description: `Added the role at ${role.company}.` }
+}
+
+/** Update a role's metadata (company/location/dates/current), located by company. */
+export function editRole(
+  resume: MasterResume,
+  company: string,
+  patch: {
+    company?: string
+    position?: string
+    location?: string
+    startDate?: string
+    endDate?: string
+    current?: boolean
+  }
+): EditResult {
+  const r = clone(resume)
+  const w = findRole(r, company)
+  if (!w) return { resume, changed: false, description: `No role found matching "${company}".` }
+  if (patch.company !== undefined) w.company = patch.company
+  if (patch.position !== undefined) w.position = patch.position
+  if (patch.location !== undefined) w.location = patch.location
+  if (patch.startDate !== undefined) w.startDate = patch.startDate
+  if (patch.endDate !== undefined) w.endDate = patch.endDate
+  if (patch.current !== undefined) w.current = patch.current
+  return { resume: r, changed: true, description: `Updated the role at ${w.company}.` }
+}
+
+/** Remove a whole role, matched by company name. */
+export function removeRole(resume: MasterResume, company: string): EditResult {
+  const r = clone(resume)
+  const before = r.work.length
+  const t = company.trim().toLowerCase()
+  r.work = r.work.filter((w) => {
+    const v = w.company.trim().toLowerCase()
+    return !(v === t || v.includes(t) || t.includes(v))
+  })
+  const changed = r.work.length < before
+  return {
+    resume: changed ? r : resume,
+    changed,
+    description: changed ? `Removed the role at ${company}.` : `No role found matching "${company}".`
+  }
+}
+
+/** Add an education entry. Missing fields default to empty. */
+export function addEducation(
+  resume: MasterResume,
+  edu: {
+    institution: string
+    area?: string
+    studyType?: string
+    startDate?: string
+    endDate?: string
+    gpa?: string
+    highlights?: string[]
+  }
+): EditResult {
+  const r = clone(resume)
+  const item: EducationItem = {
+    institution: edu.institution,
+    area: edu.area ?? '',
+    studyType: edu.studyType ?? '',
+    startDate: edu.startDate ?? '',
+    endDate: edu.endDate ?? '',
+    gpa: edu.gpa ?? '',
+    highlights: edu.highlights ?? []
+  }
+  r.education = [...(r.education ?? []), item]
+  return { resume: r, changed: true, description: `Added education at ${edu.institution}.` }
+}
+
+/** Remove an education entry, matched by institution name. */
+export function removeEducation(resume: MasterResume, institution: string): EditResult {
+  const r = clone(resume)
+  const list = r.education ?? []
+  const before = list.length
+  const t = institution.trim().toLowerCase()
+  r.education = list.filter((e) => {
+    const v = e.institution.trim().toLowerCase()
+    return !(v === t || v.includes(t) || t.includes(v))
+  })
+  const changed = r.education.length < before
+  return {
+    resume: changed ? r : resume,
+    changed,
+    description: changed
+      ? `Removed education at ${institution}.`
+      : `No education found matching "${institution}".`
+  }
+}
+
+/** Add a certification. */
+export function addCertification(
+  resume: MasterResume,
+  cert: { name: string; issuer?: string; date?: string }
+): EditResult {
+  const r = clone(resume)
+  const item: CertificationItem = {
+    name: cert.name,
+    issuer: cert.issuer ?? '',
+    date: cert.date ?? ''
+  }
+  r.certifications = [...(r.certifications ?? []), item]
+  return { resume: r, changed: true, description: `Added the certification "${cert.name}".` }
+}
+
+/** Remove a certification, matched by name. */
+export function removeCertification(resume: MasterResume, name: string): EditResult {
+  const r = clone(resume)
+  const list = r.certifications ?? []
+  const before = list.length
+  const t = name.trim().toLowerCase()
+  r.certifications = list.filter((c) => {
+    const v = c.name.trim().toLowerCase()
+    return !(v === t || v.includes(t) || t.includes(v))
+  })
+  const changed = r.certifications.length < before
+  return {
+    resume: changed ? r : resume,
+    changed,
+    description: changed
+      ? `Removed the certification "${name}".`
+      : `No certification found matching "${name}".`
+  }
+}
+
+/** Add a publication. */
+export function addPublication(
+  resume: MasterResume,
+  pub: { title: string; venue?: string; date?: string; url?: string; description?: string }
+): EditResult {
+  const r = clone(resume)
+  const item: PublicationItem = {
+    title: pub.title,
+    venue: pub.venue ?? '',
+    date: pub.date ?? '',
+    url: pub.url ?? '',
+    description: pub.description ?? ''
+  }
+  r.publications = [...(r.publications ?? []), item]
+  return { resume: r, changed: true, description: `Added the publication "${pub.title}".` }
+}
+
+/** Remove a publication, matched by title. */
+export function removePublication(resume: MasterResume, title: string): EditResult {
+  const r = clone(resume)
+  const list = r.publications ?? []
+  const before = list.length
+  const t = title.trim().toLowerCase()
+  r.publications = list.filter((p) => {
+    const v = p.title.trim().toLowerCase()
+    return !(v === t || v.includes(t) || t.includes(v))
+  })
+  const changed = r.publications.length < before
+  return {
+    resume: changed ? r : resume,
+    changed,
+    description: changed
+      ? `Removed the publication "${title}".`
+      : `No publication found matching "${title}".`
+  }
 }

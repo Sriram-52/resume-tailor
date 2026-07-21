@@ -10,11 +10,14 @@ import type {
 } from '../../../shared/resume'
 import { Area, Button, CsvField, Field, LinesArea, Spinner } from '../ui'
 import { extractResumeText } from '../extract'
+import { MasterChatPanel } from './MasterChatPanel'
+import { getTemplate, templates } from '../templates'
 
 export function MasterEditor({
   master,
   setMaster,
   onSave,
+  onAiEdit,
   profileName,
   canDelete,
   onRename,
@@ -24,6 +27,8 @@ export function MasterEditor({
   master: MasterResume
   setMaster: (m: MasterResume) => void
   onSave: () => Promise<void>
+  /** Persist an AI-applied edit immediately (auto-save from the chat panel). */
+  onAiEdit: (m: MasterResume) => void
   profileName: string
   canDelete: boolean
   onRename: (name: string) => void
@@ -36,6 +41,10 @@ export function MasterEditor({
   const [saved, setSaved] = useState(false)
   // id of a just-added item to scroll to and briefly highlight
   const [flash, setFlash] = useState<string | null>(null)
+  // PDF export (same templates/pipeline as the tailored-resume export)
+  const [templateId, setTemplateId] = useState('classic')
+  const [exportMsg, setExportMsg] = useState('')
+  const [exportErr, setExportErr] = useState('')
 
   useEffect(() => {
     if (!flash) return
@@ -104,6 +113,16 @@ export function MasterEditor({
     setSaved(true)
   }
 
+  async function exportPdf(): Promise<void> {
+    setExportMsg('')
+    setExportErr('')
+    const html = getTemplate(templateId).render(master)
+    const name = `${(master.basics.name || 'resume').replace(/\s+/g, '_')}_master.pdf`
+    const r = await window.api.exportPdf(html, name)
+    if (r.ok && r.path) setExportMsg(`Saved PDF to ${r.path}`)
+    else if (!r.cancelled) setExportErr(r.error ?? 'Export failed')
+  }
+
   // Generic list helpers (null-safe for resumes saved before a section existed)
   function updateList<T>(key: keyof MasterResume, idx: number, item: T): void {
     const list = [...((master[key] as unknown as T[]) ?? [])]
@@ -127,6 +146,20 @@ export function MasterEditor({
         <h2>Master resume</h2>
         <div className="row">
           {saved && <span className="ok-badge">Saved</span>}
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            title="PDF template"
+          >
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <Button variant="ghost" onClick={exportPdf}>
+            Export PDF
+          </Button>
           <Button onClick={save}>Save</Button>
         </div>
       </div>
@@ -134,6 +167,8 @@ export function MasterEditor({
         Your full career superset. Tailoring picks and rewrites from this. Import once, then keep it
         updated.
       </p>
+      {exportMsg && <div className="ok-box">{exportMsg}</div>}
+      {exportErr && <div className="err-box">{exportErr}</div>}
 
       <div className="profile-bar">
         <Field label="Profile name" value={profileName} onChange={onRename} />
@@ -148,6 +183,12 @@ export function MasterEditor({
           )}
         </div>
       </div>
+
+      {/* AI assistant */}
+      <details className="panel" open={!!master.basics.name}>
+        <summary>✨ Ask AI to update this resume</summary>
+        <MasterChatPanel master={master} onApply={onAiEdit} />
+      </details>
 
       {/* Import */}
       <details className="panel" open={!master.basics.name}>

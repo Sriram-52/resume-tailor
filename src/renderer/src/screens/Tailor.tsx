@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MasterResume, ResumeProfile } from '../../../shared/resume'
 import { emptyMaster } from '../../../shared/resume'
 import type { Application, KeywordGap } from '../../../shared/application'
-import { getTemplate, templates } from '../templates'
+import { getTemplate, renderCoverLetter, templates } from '../templates'
 import { ChatPanel } from './ChatPanel'
 import { DiffView } from './DiffView'
 import { Area, Button, Field, Spinner } from '../ui'
@@ -171,6 +171,39 @@ export function Tailor({
     const name = `${(tailored?.basics.name || 'resume').replace(/\s+/g, '_')}_${(company || 'role').replace(/\s+/g, '_')}.pdf`
     const r = await window.api.exportPdf(html, name)
     if (r.ok && r.path) setSavedMsg(`Saved PDF to ${r.path}`)
+    else if (!r.cancelled) setError(r.error ?? 'Export failed')
+  }
+
+  /** Copy the cover letter text — for pasting into an ATS form or email body. */
+  async function copyCover(): Promise<void> {
+    if (!cover) return
+    try {
+      await navigator.clipboard.writeText(cover)
+      setError('')
+      setSavedMsg('Cover letter copied to clipboard.')
+    } catch {
+      setError('Could not copy to clipboard.')
+    }
+  }
+
+  /** Export the cover letter as a PDF — for attaching / uploading. */
+  async function exportCoverPdf(): Promise<void> {
+    if (!cover) return
+    setError('')
+    setSavedMsg('')
+    const base = tailored ?? master
+    const html = renderCoverLetter(base, cover, {
+      company,
+      role,
+      date: new Date().toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    })
+    const name = `${(base.basics.name || 'cover-letter').replace(/\s+/g, '_')}_${(company || 'role').replace(/\s+/g, '_')}_cover.pdf`
+    const r = await window.api.exportPdf(html, name)
+    if (r.ok && r.path) setSavedMsg(`Saved cover letter PDF to ${r.path}`)
     else if (!r.cancelled) setError(r.error ?? 'Export failed')
   }
 
@@ -402,6 +435,10 @@ export function Tailor({
             jd={jd}
             gap={gap}
             onResume={setTailored}
+            company={company}
+            role={role}
+            cover={cover ?? ''}
+            onCover={setCover}
             hero
           />
         </div>
@@ -485,7 +522,28 @@ export function Tailor({
               {panel === 'cover' && (
                 <>
                   {cover ? (
-                    <Area value={cover} onChange={setCover} rows={20} />
+                    <>
+                      <div className="row wrap-row">
+                        <Button variant="ghost" onClick={copyCover}>
+                          Copy text
+                        </Button>
+                        <Button variant="ghost" onClick={exportCoverPdf}>
+                          Export PDF
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={genCover}
+                          disabled={!!busy || !jd.trim()}
+                        >
+                          {busy === 'Writing cover letter…' ? (
+                            <Spinner text="Rewriting…" />
+                          ) : (
+                            'Regenerate'
+                          )}
+                        </Button>
+                      </div>
+                      <Area value={cover} onChange={setCover} rows={20} />
+                    </>
                   ) : (
                     <div>
                       <p className="muted">No cover letter yet.</p>

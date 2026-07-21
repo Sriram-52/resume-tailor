@@ -3,6 +3,8 @@ import { app } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { findClaudeBinary } from './claudeBin'
+import { recordUsage } from './store'
+import type { UsageKind } from '../shared/usage'
 
 /**
  * Bridge to the Claude Code CLI in headless mode.
@@ -15,6 +17,15 @@ import { findClaudeBinary } from './claudeBin'
  * Everything the model needs is passed in the prompt itself.
  */
 
+/** Token counts + cost reported by the CLI for a single call. */
+export interface ClaudeUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  costUsd: number
+}
+
 export interface ClaudeResult {
   ok: boolean
   /** The model's textual output (contents of the CLI's `result` field). */
@@ -23,6 +34,8 @@ export interface ClaudeResult {
   error?: string
   /** Wall-clock duration reported by the CLI, if available. */
   durationMs?: number
+  /** Tokens/cost the CLI reported for this call, if available. */
+  usage?: ClaudeUsage
 }
 
 /**
@@ -51,6 +64,26 @@ export interface RunOptions {
   signal?: AbortSignal
   /** Timeout in ms. Default 180s. */
   timeoutMs?: number
+  /**
+   * Feature this call belongs to. When set, the tokens/cost the CLI reports are
+   * recorded to the local usage ledger (see store.recordUsage). Omit to skip.
+   */
+  kind?: UsageKind
+}
+
+/** Pull the token counts + cost out of the CLI's parsed JSON `result` object. */
+function extractUsage(parsed: { usage?: unknown; total_cost_usd?: unknown }): ClaudeUsage | undefined {
+  const u = parsed?.usage
+  if (!u || typeof u !== 'object') return undefined
+  const n = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0)
+  const o = u as Record<string, unknown>
+  return {
+    inputTokens: n(o.input_tokens),
+    outputTokens: n(o.output_tokens),
+    cacheReadTokens: n(o.cache_read_input_tokens),
+    cacheCreationTokens: n(o.cache_creation_input_tokens),
+    costUsd: n(parsed.total_cost_usd)
+  }
 }
 
 /**
@@ -113,11 +146,16 @@ export function runClaude(prompt: string, opts: RunOptions = {}): Promise<Claude
       }
       try {
         const parsed = JSON.parse(stdout)
+        // Tokens are burned whether or not the call errored, so record first.
+        const usage = extractUsage(parsed)
+        if (usage && opts.kind) {
+          recordUsage({ ts: new Date().toISOString(), kind: opts.kind, model, ...usage })
+        }
         if (parsed.is_error) {
-          finish({ ok: false, text: '', error: parsed.result || 'Claude returned an error' })
+          finish({ ok: false, text: '', error: parsed.result || 'Claude returned an error', usage })
           return
         }
-        finish({ ok: true, text: parsed.result ?? '', durationMs: parsed.duration_ms })
+        finish({ ok: true, text: parsed.result ?? '', durationMs: parsed.duration_ms, usage })
       } catch {
         finish({ ok: false, text: '', error: `Could not parse CLI output: ${stdout.slice(0, 500)}` })
       }

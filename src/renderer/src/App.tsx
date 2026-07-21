@@ -182,9 +182,11 @@ export default function App(): React.JSX.Element {
         {tab === 'settings' && <Settings />}
         {tab === 'master' && (
           <MasterEditor
+            key={active.id}
             master={active.resume}
             setMaster={setActiveResume}
             onSave={saveActive}
+            onAiEdit={(r) => updateProfileResume(active.id, r)}
             profileName={active.name}
             canDelete={profiles.length > 1}
             onRename={renameProfile}

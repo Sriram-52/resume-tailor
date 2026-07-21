@@ -242,7 +242,7 @@ export async function scoreJobLeads(
   }))
   const r = await runClaudeJson<{
     scores: { id: string; fitScore: number; matchReason: string }[]
-  }>(scoreJobsPrompt(resume, jobs), { model: getTailorModel() })
+  }>(scoreJobsPrompt(resume, jobs), { model: getTailorModel(), kind: 'score' })
   if (!r.ok || !r.data?.scores) return { ok: false, error: r.error ?? 'Scoring failed.' }
 
   const byId = new Map(r.data.scores.map((s) => [String(s.id), s]))
