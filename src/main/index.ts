@@ -33,6 +33,7 @@ function logCrash(kind: string, detail: unknown): void {
 process.on('uncaughtException', (e) => logCrash('uncaughtException', e))
 process.on('unhandledRejection', (e) => logCrash('unhandledRejection', e))
 import { runClaude, runClaudeJson } from './claude'
+import { fetchJobPosting } from './jobFetch'
 import {
   loadProfiles,
   saveProfiles,
@@ -192,6 +193,9 @@ function registerIpc(): void {
   ipcMain.handle('apps:load', () => loadApplications())
   ipcMain.handle('apps:save', (_e, appRecord: Application) => saveApplication(appRecord))
   ipcMain.handle('apps:delete', (_e, id: string) => deleteApplication(id))
+
+  // Job posting fetch (URL -> company/role/description)
+  ipcMain.handle('job:fetch', (_e, url: string) => fetchJobPosting(url))
 
   // AI features
   ipcMain.handle('tailor:run', (_e, master: MasterResume, jd: string) =>

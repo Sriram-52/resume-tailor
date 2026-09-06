@@ -4,6 +4,7 @@ import type { Application, KeywordGap, Suggestion } from '../shared/application'
 import type { ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
+import type { JobPosting } from '../shared/jobPosting'
 import type { AppSettings } from '../shared/settings'
 import type { UsageState } from '../shared/usage'
 
@@ -82,6 +83,9 @@ const api = {
     role: string
   ): Promise<JsonResult<{ coverLetter: string }>> =>
     ipcRenderer.invoke('coverletter:run', m, jd, company, role),
+
+  fetchJobPosting: (url: string): Promise<JsonResult<JobPosting>> =>
+    ipcRenderer.invoke('job:fetch', url),
 
   exportPdf: (html: string, defaultName: string): Promise<ExportResult> =>
     ipcRenderer.invoke('pdf:export', html, defaultName),

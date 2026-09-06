@@ -3,6 +3,7 @@ import type { EmploymentType, JobLead, JobSearchFilters } from '../shared/jobs'
 import { getApifyToken, getTailorModel } from './config'
 import { runClaudeJson } from './claude'
 import { scoreJobsPrompt } from './prompts'
+import { htmlToText } from './jobFetchCore'
 
 /**
  * Job discovery via Apify's Dice.com scraper.
@@ -92,21 +93,6 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
 
 /** Convert the JSON-LD description HTML to readable plain text. */
-function htmlToText(h: string): string {
-  return h
-    .replace(/<\s*(br|\/p|\/li|\/div|\/h[1-6]|\/tr)\s*>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#39;|&rsquo;|&apos;/gi, "'")
-    .replace(/&quot;|&ldquo;|&rdquo;/gi, '"')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
-}
 
 /**
  * The Apify Dice actor only returns a short listing snippet. The full job

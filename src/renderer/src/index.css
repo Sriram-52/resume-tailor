@@ -1325,3 +1325,19 @@ select.status {
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* URL + Fetch button on the Tailor form */
+.url-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+.url-row .field {
+  flex: 1;
+  min-width: 0;
+}
+.url-row .btn {
+  white-space: nowrap;
+  margin-bottom: 2px;
+}

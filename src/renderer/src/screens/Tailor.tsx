@@ -45,6 +45,7 @@ export function Tailor({
   const [tailorVersion, setTailorVersion] = useState(0)
 
   const [busy, setBusy] = useState<string>('')
+  const [fetching, setFetching] = useState(false)
   const [error, setError] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
   // Which secondary panel (if any) is open alongside the chat hero.
@@ -112,6 +113,29 @@ export function Tailor({
     }, 500)
     return () => clearTimeout(t)
   }, [jd, company, role, jobUrl, templateId, activeId, tailored, gap, cover, appId, appCreatedAt])
+
+  /** Pull company, role, and description from the job posting URL. */
+  async function fetchFromUrl(): Promise<void> {
+    const url = jobUrl.trim()
+    if (!url || busy || fetching) return
+    setError('')
+    setSavedMsg('')
+    setFetching(true)
+    const r = await window.api.fetchJobPosting(url)
+    if (!r.ok || !r.data) {
+      setError(r.error ?? 'Could not fetch that posting.')
+    } else {
+      if (r.data.company) setCompany(r.data.company)
+      if (r.data.role) setRole(r.data.role)
+      if (r.data.description) setJd(r.data.description)
+      const via =
+        r.data.source === 'page' ? 'the page' : r.data.source === 'linkedin' ? 'LinkedIn' : r.data.source
+      setSavedMsg(
+        `Filled from ${via}${r.data.location ? ` · ${r.data.location}` : ''}. Check the fields, then tailor.`
+      )
+    }
+    setFetching(false)
+  }
 
   async function runAll(): Promise<void> {
     if (!jd.trim()) return
@@ -302,8 +326,9 @@ export function Tailor({
         <div className="intake-card">
           <h2>Tailor to a job</h2>
           <p className="muted">
-            Paste a job description and Resume Tailor rewrites your resume to match. Then you refine
-            it by chatting — the resume, ATS score, and cover letter are one click away.
+            Paste a job posting link or the description itself and Resume Tailor rewrites your
+            resume to match. Then you refine it by chatting: the resume, ATS score, and cover letter
+            are one click away.
           </p>
           {profiles.length > 1 && (
             <label className="field field-full">
@@ -321,13 +346,23 @@ export function Tailor({
             <Field label="Company" value={company} onChange={setCompany} placeholder="Acme Inc" />
             <Field label="Role" value={role} onChange={setRole} placeholder="Senior Engineer" />
           </div>
-          <Field
-            label="Job posting URL (optional)"
-            value={jobUrl}
-            onChange={setJobUrl}
-            placeholder="https://…"
-            full
-          />
+          <div className="url-row">
+            <Field
+              label="Job posting URL"
+              value={jobUrl}
+              onChange={setJobUrl}
+              placeholder="Paste a posting link and press Fetch to fill the fields below"
+              full
+              onEnter={fetchFromUrl}
+            />
+            <Button
+              variant="ghost"
+              onClick={fetchFromUrl}
+              disabled={!!busy || fetching || !jobUrl.trim()}
+            >
+              {fetching ? <Spinner text="Fetching…" /> : 'Fetch'}
+            </Button>
+          </div>
           <Area
             label="Job description"
             value={jd}
@@ -565,7 +600,22 @@ export function Tailor({
                     <Field label="Company" value={company} onChange={setCompany} />
                     <Field label="Role" value={role} onChange={setRole} />
                   </div>
-                  <Field label="Job posting URL" value={jobUrl} onChange={setJobUrl} full />
+                  <div className="url-row">
+                    <Field
+                      label="Job posting URL"
+                      value={jobUrl}
+                      onChange={setJobUrl}
+                      full
+                      onEnter={fetchFromUrl}
+                    />
+                    <Button
+                      variant="ghost"
+                      onClick={fetchFromUrl}
+                      disabled={!!busy || fetching || !jobUrl.trim()}
+                    >
+                      {fetching ? <Spinner text="Fetching…" /> : 'Fetch'}
+                    </Button>
+                  </div>
                   <Area label="Job description" value={jd} onChange={setJd} rows={16} />
                   <div className="row wrap-row">
                     <Button onClick={runAll} disabled={!!busy || !jd.trim()}>

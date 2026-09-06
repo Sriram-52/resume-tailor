@@ -20,18 +20,31 @@ export function Field({
   value,
   onChange,
   placeholder,
-  full
+  full,
+  onEnter
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   full?: boolean
+  /** Called when the user presses Enter in the input. */
+  onEnter?: () => void
 }): React.JSX.Element {
   return (
     <label className={`field ${full ? 'field-full' : ''}`}>
       <span>{label}</span>
-      <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (onEnter && e.key === 'Enter') {
+            e.preventDefault()
+            onEnter()
+          }
+        }}
+      />
     </label>
   )
 }

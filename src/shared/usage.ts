@@ -17,6 +17,7 @@ export type UsageKind =
   | 'chat'
   | 'masterchat'
   | 'ping'
+  | 'jobfetch'
 
 /** Human labels for each kind, used in the Usage breakdown. */
 export const USAGE_KIND_LABELS: Record<UsageKind, string> = {
@@ -28,7 +29,8 @@ export const USAGE_KIND_LABELS: Record<UsageKind, string> = {
   import: 'Resume import',
   chat: 'Chat / refine',
   masterchat: 'Master edits',
-  ping: 'Connection check'
+  ping: 'Connection check',
+  jobfetch: 'Job posting fetch'
 }
 
 export interface TokenCounts {

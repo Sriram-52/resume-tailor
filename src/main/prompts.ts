@@ -196,3 +196,25 @@ JOB DESCRIPTION:
 ${jobDescription}
 """`
 }
+
+/** Pull the job posting out of a scraped web page. */
+export function jobExtractPrompt(pageText: string, url: string): string {
+  return `You are extracting a job posting from the text of a web page. Return a single JSON object with EXACTLY this shape:
+
+{ "company": string, "role": string, "location": string, "description": string }
+
+Rules:
+- Output ONLY the JSON object. No markdown, no code fence, no commentary.
+- "company": the hiring company's name as the posting states it. "" if you truly cannot tell.
+- "role": the job title exactly as posted.
+- "location": city/state/country and remote or hybrid policy if stated, e.g. "Remote - US" or "Atlanta, GA (hybrid)". "" if absent.
+- "description": the full posting text, cleaned. Keep every substantive section verbatim: about the role, responsibilities, requirements, nice-to-haves, tech stack, compensation, benefits, work location policy. Preserve the original wording and bullet structure using "- " bullets. Drop site navigation, cookie banners, footers, unrelated job links, share buttons, and boilerplate equal-opportunity legal text. Do NOT summarize or paraphrase.
+- Never invent details that are not on the page.
+
+SOURCE URL: ${url}
+
+PAGE TEXT:
+"""
+${pageText}
+"""`
+}
