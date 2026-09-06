@@ -89,6 +89,15 @@ function shell(css: string, body: string): string {
   .c-sep { margin: 0 7px; opacity: 0.5; }
   .tech { font-size: 8.5pt; color: #555; margin-top: 3px; }
   .tech-label { font-weight: bold; }
+  /* Print pagination: keep headings with the content below them, keep short
+     entries whole, and let long entries split only between bullets. */
+  h2 { break-after: avoid; page-break-after: avoid; }
+  .item { break-inside: avoid; page-break-inside: avoid; }
+  .item-work { break-inside: auto; page-break-inside: auto; }
+  .item-work .item-head, .item-work .item-sub { break-after: avoid; page-break-after: avoid; }
+  li { break-inside: avoid; page-break-inside: avoid; }
+  .skills-row { break-inside: avoid; page-break-inside: avoid; }
+  .item-head > span + span { white-space: nowrap; margin-left: 12px; }
   ${css}
   </style></head><body>${body}</body></html>`
 }
@@ -127,7 +136,7 @@ const classic: Template = {
         r.work.length
           ? `<h2>Experience</h2>${r.work
               .map(
-                (w) => `<div class="item">
+                (w) => `<div class="item item-work">
         <div class="item-head"><span>${esc(w.position)}</span><span>${esc(w.startDate)}${w.startDate || w.endDate ? ' – ' : ''}${esc(w.current ? 'Present' : w.endDate)}</span></div>
         <div class="item-sub"><span>${esc(w.company)}</span><span>${esc(w.location)}</span></div>
         ${bullets(w.highlights)}
@@ -176,7 +185,7 @@ const classic: Template = {
       }
       ${
         r.certifications.length
-          ? `<h2>Certifications</h2>${r.certifications
+          ? `<h2>Certifications &amp; Awards</h2>${r.certifications
               .map(
                 (c) =>
                   `<div class="item"><div class="item-head"><span>${esc(c.name)}</span><span>${esc(c.date)}</span></div><div class="item-sub"><span>${esc(c.issuer)}</span></div></div>`
@@ -233,7 +242,7 @@ const modern: Template = {
         r.work.length
           ? `<h2>Experience</h2>${r.work
               .map(
-                (w) => `<div class="item">
+                (w) => `<div class="item item-work">
         <div class="item-head"><span class="role">${esc(w.position)} · <span class="company">${esc(w.company)}</span></span><span class="when">${esc(w.startDate)}${w.startDate || w.endDate ? ' – ' : ''}${esc(w.current ? 'Present' : w.endDate)}</span></div>
         ${bullets(w.highlights)}
         ${techLine(w.tech)}
@@ -274,8 +283,8 @@ const modern: Template = {
       }
       ${
         r.certifications.length
-          ? `<h2>Certifications</h2>${r.certifications
-              .map((c) => `<div class="item"><span class="role">${esc(c.name)}</span> — ${esc(c.issuer)} <span class="when">${esc(c.date)}</span></div>`)
+          ? `<h2>Certifications &amp; Awards</h2>${r.certifications
+              .map((c) => `<div class="item"><span class="role">${esc(c.name)}</span> · ${esc(c.issuer)} <span class="when">${esc(c.date)}</span></div>`)
               .join('')}`
           : ''
       }
