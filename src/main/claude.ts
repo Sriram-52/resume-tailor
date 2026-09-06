@@ -5,6 +5,7 @@ import { join } from 'path'
 import { findClaudeBinary } from './claudeBin'
 import { recordUsage } from './store'
 import type { UsageKind } from '../shared/usage'
+import { DEFAULT_MODEL } from '../shared/settings'
 
 /**
  * Bridge to the Claude Code CLI in headless mode.
@@ -92,7 +93,7 @@ function extractUsage(parsed: { usage?: unknown; total_cost_usd?: unknown }): Cl
  */
 export function runClaude(prompt: string, opts: RunOptions = {}): Promise<ClaudeResult> {
   const bin = resolveClaudeBin()
-  const model = opts.model ?? 'claude-sonnet-5'
+  const model = opts.model ?? DEFAULT_MODEL
   const args = ['-p', '--output-format', 'json', '--model', model]
 
   return new Promise<ClaudeResult>((resolve) => {

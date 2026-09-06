@@ -17,9 +17,18 @@ export function emptySettings(): AppSettings {
   return { apifyToken: '', tailorModel: '' }
 }
 
+/**
+ * The model the app uses when the user has not picked one in Settings. Pinned
+ * explicitly on every call so the app never inherits the machine's global
+ * Claude Code default, which may be a model the bundled CLI cannot run.
+ */
+export const DEFAULT_MODEL = 'claude-sonnet-5'
+
 /** The model choices offered in Settings. Empty value = app default. */
 export const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Sonnet 5 (recommended)' },
-  { value: 'claude-opus-4-8', label: 'Opus 4.8 (highest quality)' },
+  { value: 'claude-fable-5-1', label: 'Fable 5.1 (highest quality)' },
+  { value: 'claude-opus-5', label: 'Opus 5' },
+  { value: 'claude-opus-4-8', label: 'Opus 4.8' },
   { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 (fastest)' }
 ]
