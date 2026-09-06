@@ -34,6 +34,7 @@ process.on('uncaughtException', (e) => logCrash('uncaughtException', e))
 process.on('unhandledRejection', (e) => logCrash('unhandledRejection', e))
 import { runClaude, runClaudeJson } from './claude'
 import { fetchJobPosting } from './jobFetch'
+import { QueueRunner } from './queue'
 import {
   loadProfiles,
   saveProfiles,
@@ -95,6 +96,7 @@ function stripCoverPreamble(s: string): string {
 }
 
 let mainWindow: BrowserWindow | null = null
+let queue: QueueRunner | null = null
 let chatSession: AgentSession | null = null
 let masterSession: AgentSession | null = null
 
@@ -193,6 +195,13 @@ function registerIpc(): void {
   ipcMain.handle('apps:load', () => loadApplications())
   ipcMain.handle('apps:save', (_e, appRecord: Application) => saveApplication(appRecord))
   ipcMain.handle('apps:delete', (_e, id: string) => deleteApplication(id))
+
+  // Tailoring queue
+  ipcMain.handle('queue:list', () => queue?.list() ?? [])
+  ipcMain.handle('queue:add', (_e, urls: string[], baseId: string) => queue?.add(urls, baseId) ?? [])
+  ipcMain.handle('queue:remove', (_e, id: string) => queue?.remove(id) ?? [])
+  ipcMain.handle('queue:retry', (_e, id: string) => queue?.retry(id) ?? [])
+  ipcMain.handle('queue:clearFinished', () => queue?.clearFinished() ?? [])
 
   // Job posting fetch (URL -> company/role/description)
   ipcMain.handle('job:fetch', (_e, url: string) => fetchJobPosting(url))
@@ -313,6 +322,11 @@ app.whenReady().then(() => {
   ensureDirs()
   registerIpc()
   mainWindow = createWindow()
+  queue = new QueueRunner()
+  const q = queue
+  const w = mainWindow
+  // Start pumping once the renderer is listening, so no progress event is lost.
+  w.webContents.once('did-finish-load', () => q.attach(w))
   mainWindow.webContents.on('render-process-gone', (_e, d) =>
     logCrash('render-process-gone', JSON.stringify(d))
   )

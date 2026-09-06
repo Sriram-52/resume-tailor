@@ -7,9 +7,10 @@ import { Tailor } from './screens/Tailor'
 import { Applications } from './screens/Applications'
 import { Discover } from './screens/Discover'
 import { Settings } from './screens/Settings'
+import { Queue } from './screens/Queue'
 import type { JobLead } from '../../shared/jobs'
 
-type Tab = 'tailor' | 'discover' | 'applications' | 'master' | 'settings'
+type Tab = 'tailor' | 'queue' | 'discover' | 'applications' | 'master' | 'settings'
 
 export default function App(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('discover')
@@ -32,6 +33,8 @@ export default function App(): React.JSX.Element {
       setApps(a)
       setLoaded(true)
     })()
+    // The queue saves applications from the main process; keep the tracker in sync.
+    return window.api.onAppsChanged(setApps)
   }, [])
 
   const active = profiles.find((p) => p.id === activeId) ?? profiles[0]
@@ -54,6 +57,27 @@ export default function App(): React.JSX.Element {
     const p: ResumeProfile = { id: crypto.randomUUID(), name: 'New resume', resume: emptyMaster() }
     persist({ profiles: [...profiles, p], activeId: p.id })
     setTab('master')
+  }
+  /** Reopen a saved application in the Tailor workspace by seeding its draft. */
+  async function openApplication(a: Application): Promise<void> {
+    await window.api.saveDraft({
+      jd: a.jobDescription,
+      company: a.company,
+      role: a.role,
+      jobUrl: a.jobUrl ?? '',
+      templateId: a.template,
+      baseId: a.baseId ?? '',
+      tailored: a.tailored,
+      gap: a.keywordGap,
+      cover: a.coverLetter,
+      appId: a.id,
+      appCreatedAt: a.createdAt
+    })
+    if (a.baseId && profiles.some((p) => p.id === a.baseId)) {
+      persist({ profiles, activeId: a.baseId })
+    }
+    setTailorReload((n) => n + 1)
+    setTab('tailor')
   }
   /** Seed the Tailor draft from a discovered job and jump to the Tailor tab. */
   async function openLeadInTailor(lead: JobLead): Promise<void> {
@@ -110,6 +134,9 @@ export default function App(): React.JSX.Element {
           <button className={tab === 'tailor' ? 'active' : ''} onClick={() => setTab('tailor')}>
             Tailor
           </button>
+          <button className={tab === 'queue' ? 'active' : ''} onClick={() => setTab('queue')}>
+            Queue
+          </button>
           <button className={tab === 'discover' ? 'active' : ''} onClick={() => setTab('discover')}>
             Discover
           </button>
@@ -164,6 +191,9 @@ export default function App(): React.JSX.Element {
             onTailorLead={openLeadInTailor}
             onOpenSettings={() => setTab('settings')}
           />
+        </div>
+        <div hidden={tab !== 'queue'} className="tab-pane">
+          <Queue profiles={profiles} activeId={activeId} apps={apps} onOpenApplication={openApplication} />
         </div>
         {tab === 'applications' && (
           <Applications

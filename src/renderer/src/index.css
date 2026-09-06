@@ -1341,3 +1341,19 @@ select.status {
   white-space: nowrap;
   margin-bottom: 2px;
 }
+
+/* Tailoring queue */
+.queue-table {
+  margin-top: 16px;
+}
+.queue-table tr.q-error td {
+  opacity: 0.9;
+}
+.q-error {
+  color: #f87171;
+  font-size: 12.5px;
+}
+.q-done {
+  color: #4ade80;
+  font-weight: 600;
+}

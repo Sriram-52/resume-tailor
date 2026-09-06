@@ -5,6 +5,7 @@ import type { ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 import type { JobPosting } from '../shared/jobPosting'
+import type { QueueItem } from '../shared/queue'
 import type { AppSettings } from '../shared/settings'
 import type { UsageState } from '../shared/usage'
 
@@ -83,6 +84,26 @@ const api = {
     role: string
   ): Promise<JsonResult<{ coverLetter: string }>> =>
     ipcRenderer.invoke('coverletter:run', m, jd, company, role),
+
+  // Tailoring queue
+  queueList: (): Promise<QueueItem[]> => ipcRenderer.invoke('queue:list'),
+  queueAdd: (urls: string[], baseId: string): Promise<QueueItem[]> =>
+    ipcRenderer.invoke('queue:add', urls, baseId),
+  queueRemove: (id: string): Promise<QueueItem[]> => ipcRenderer.invoke('queue:remove', id),
+  queueRetry: (id: string): Promise<QueueItem[]> => ipcRenderer.invoke('queue:retry', id),
+  queueClearFinished: (): Promise<QueueItem[]> => ipcRenderer.invoke('queue:clearFinished'),
+  /** Subscribe to queue progress (full item list each time). Returns an unsubscribe function. */
+  onQueueEvent: (cb: (items: QueueItem[]) => void): (() => void) => {
+    const handler = (_e: unknown, data: QueueItem[]): void => cb(data)
+    ipcRenderer.on('queue:event', handler)
+    return () => ipcRenderer.removeListener('queue:event', handler)
+  },
+  /** Fired when the main process saves applications on its own (queue results). */
+  onAppsChanged: (cb: (apps: Application[]) => void): (() => void) => {
+    const handler = (_e: unknown, data: Application[]): void => cb(data)
+    ipcRenderer.on('apps:changed', handler)
+    return () => ipcRenderer.removeListener('apps:changed', handler)
+  },
 
   fetchJobPosting: (url: string): Promise<JsonResult<JobPosting>> =>
     ipcRenderer.invoke('job:fetch', url),

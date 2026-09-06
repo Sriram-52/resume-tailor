@@ -6,6 +6,7 @@ import { emptyMaster, type MasterResume, type ProfilesState } from '../shared/re
 import type { Application } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobResultsState } from '../shared/jobs'
+import type { QueueItem } from '../shared/queue'
 import { emptySettings, type AppSettings } from '../shared/settings'
 import {
   emptyTotals,
@@ -33,6 +34,7 @@ const draftPath = (): string => join(dataDir(), 'draft.json')
 const jobResultsPath = (): string => join(dataDir(), 'job-results.json')
 const settingsPath = (): string => join(dataDir(), 'settings.json')
 const usagePath = (): string => join(dataDir(), 'usage.json')
+const queuePath = (): string => join(dataDir(), 'queue.json')
 
 function readJson<T>(path: string, fallback: T): T {
   if (!existsSync(path)) return fallback
@@ -113,6 +115,16 @@ export function deleteApplication(id: string): Application[] {
   const all = loadApplications().filter((a) => a.id !== id)
   writeJson(appsPath(), all)
   return all
+}
+
+// --- Tailoring queue -------------------------------------------------------
+
+export function loadQueue(): QueueItem[] {
+  return readJson<QueueItem[]>(queuePath(), [])
+}
+
+export function saveQueue(items: QueueItem[]): void {
+  writeJson(queuePath(), items)
 }
 
 // --- Job search results (last search, cached across restarts) --------------
