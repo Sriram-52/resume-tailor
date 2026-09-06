@@ -12,6 +12,7 @@ import { Area, Button, CsvField, Field, LinesArea, Spinner } from '../ui'
 import { extractResumeText } from '../extract'
 import { MasterChatPanel } from './MasterChatPanel'
 import { getTemplate, templates } from '../templates'
+import { pdfFileName } from '../../../shared/filename'
 
 export function MasterEditor({
   master,
@@ -117,7 +118,7 @@ export function MasterEditor({
     setExportMsg('')
     setExportErr('')
     const html = getTemplate(templateId).render(master)
-    const name = `${(master.basics.name || 'resume').replace(/\s+/g, '_')}_master.pdf`
+    const name = pdfFileName(master.basics.name, '', '', 'master')
     const r = await window.api.exportPdf(html, name)
     if (r.ok && r.path) setExportMsg(`Saved PDF to ${r.path}`)
     else if (!r.cancelled) setExportErr(r.error ?? 'Export failed')

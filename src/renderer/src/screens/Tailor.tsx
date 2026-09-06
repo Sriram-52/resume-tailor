@@ -6,6 +6,7 @@ import { getTemplate, renderCoverLetter, templates } from '../templates'
 import { ChatPanel } from './ChatPanel'
 import { DiffView } from './DiffView'
 import { Area, Button, Field, Spinner } from '../ui'
+import { pdfFileName } from '../../../shared/filename'
 
 type Panel = 'preview' | 'ats' | 'cover' | 'job' | 'diff'
 
@@ -192,7 +193,7 @@ export function Tailor({
 
   async function exportPdf(): Promise<void> {
     if (!html) return
-    const name = `${(tailored?.basics.name || 'resume').replace(/\s+/g, '_')}_${(company || 'role').replace(/\s+/g, '_')}.pdf`
+    const name = pdfFileName(tailored?.basics.name, company, role || tailored?.basics.label)
     const r = await window.api.exportPdf(html, name)
     if (r.ok && r.path) setSavedMsg(`Saved PDF to ${r.path}`)
     else if (!r.cancelled) setError(r.error ?? 'Export failed')
@@ -225,7 +226,7 @@ export function Tailor({
         day: 'numeric'
       })
     })
-    const name = `${(base.basics.name || 'cover-letter').replace(/\s+/g, '_')}_${(company || 'role').replace(/\s+/g, '_')}_cover.pdf`
+    const name = pdfFileName(base.basics.name, company, role || base.basics.label, 'cover')
     const r = await window.api.exportPdf(html, name)
     if (r.ok && r.path) setSavedMsg(`Saved cover letter PDF to ${r.path}`)
     else if (!r.cancelled) setError(r.error ?? 'Export failed')

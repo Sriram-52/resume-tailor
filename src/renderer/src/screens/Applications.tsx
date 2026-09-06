@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Application, ApplicationStatus } from '../../../shared/application'
 import { getTemplate, renderCoverLetter } from '../templates'
 import { Button } from '../ui'
+import { pdfFileName } from '../../../shared/filename'
 
 const STATUSES: ApplicationStatus[] = [
   'draft',
@@ -55,7 +56,7 @@ export function Applications({
 
   async function exportOne(a: Application): Promise<void> {
     const html = getTemplate(a.template).render(a.tailored)
-    const name = `${a.tailored.basics.name.replace(/\s+/g, '_')}_${a.company.replace(/\s+/g, '_')}.pdf`
+    const name = pdfFileName(a.tailored.basics.name, a.company, a.role)
     await window.api.exportPdf(html, name)
   }
 
@@ -70,7 +71,7 @@ export function Applications({
         day: 'numeric'
       })
     })
-    const name = `${a.tailored.basics.name.replace(/\s+/g, '_')}_${a.company.replace(/\s+/g, '_')}_cover.pdf`
+    const name = pdfFileName(a.tailored.basics.name, a.company, a.role, 'cover')
     await window.api.exportPdf(html, name)
   }
 
