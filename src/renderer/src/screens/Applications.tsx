@@ -36,6 +36,32 @@ export function Applications({
   const [selected, setSelected] = useState<Application | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<ApplicationStatus | null>(null)
+  const [sort, setSort] = useState<'score' | 'date'>(() => {
+    try {
+      return (localStorage.getItem('apps.sort') as 'score' | 'date') || 'score'
+    } catch {
+      return 'score'
+    }
+  })
+
+  function changeSort(v: 'score' | 'date'): void {
+    setSort(v)
+    try {
+      localStorage.setItem('apps.sort', v)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Highest ATS first (unscored last), or newest first. Ties fall back to the other key. */
+  function order(list: Application[]): Application[] {
+    const score = (a: Application): number => a.keywordGap?.matchScore ?? -1
+    return [...list].sort((a, b) =>
+      sort === 'score'
+        ? score(b) - score(a) || b.createdAt.localeCompare(a.createdAt)
+        : b.createdAt.localeCompare(a.createdAt) || score(b) - score(a)
+    )
+  }
 
   /** Reopen a saved application in the Tailor workspace by seeding its draft. */
   async function openInTailor(a: Application): Promise<void> {
@@ -106,12 +132,21 @@ export function Applications({
     <div className="screen apps">
       <div className="screen-head">
         <h2>Applications</h2>
-        <span className="muted">Drag a card between columns to change its status.</span>
+        <div className="row">
+          <span className="muted">Drag a card between columns to change its status.</span>
+          <label className="sort-ctl">
+            <span className="muted">Sort</span>
+            <select value={sort} onChange={(e) => changeSort(e.target.value as 'score' | 'date')}>
+              <option value="score">ATS score</option>
+              <option value="date">Newest</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="kanban">
         {COLUMNS.map((col) => {
-          const cards = apps.filter((a) => a.status === col.status)
+          const cards = order(apps.filter((a) => a.status === col.status))
           return (
             <div
               key={col.status}

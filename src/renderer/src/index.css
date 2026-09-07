@@ -1484,3 +1484,18 @@ select.status {
   border: 1px solid var(--border);
   background: var(--panel2);
 }
+
+.sort-ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.sort-ctl select {
+  font-size: 12.5px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: var(--text);
+}
