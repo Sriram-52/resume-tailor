@@ -17,6 +17,12 @@ function scoreClass(n: number): string {
   return n >= 75 ? 'hi' : n >= 50 ? 'mid' : 'lo'
 }
 
+/** "2026-09-06" -> "Sep 6" so it fits a narrow card. */
+function shortDate(iso: string): string {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? iso.slice(0, 10) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
 export function Applications({
   apps,
   setApps,
@@ -145,31 +151,31 @@ export function Applications({
                   <div className="kcard-role">{a.role}</div>
                   <div className="kcard-meta">
                     {typeof a.keywordGap?.matchScore === 'number' ? (
-                      <span className={`ats-cell score-${scoreClass(a.keywordGap.matchScore)}`}>
+                      <span className={`ats-cell score-${scoreClass(a.keywordGap.matchScore)}`} title="ATS match">
                         {a.keywordGap.matchScore}
                       </span>
                     ) : (
-                      <span className="muted">no ATS</span>
+                      <span className="muted" title="No ATS score yet">—</span>
                     )}
-                    <span className="muted">{a.createdAt.slice(0, 10)}</span>
+                    <span className="muted" title={a.createdAt.slice(0, 10)}>{shortDate(a.createdAt)}</span>
                     {a.jobUrl && (
-                      <a className="posting-link" href={a.jobUrl} target="_blank" rel="noreferrer">
+                      <a className="posting-link" href={a.jobUrl} target="_blank" rel="noreferrer" title="Open the job posting">
                         ↗ posting
                       </a>
                     )}
                   </div>
                   <div className="kcard-actions">
-                    <Button variant="ghost" onClick={() => openInTailor(a)}>
+                    <Button variant="ghost" onClick={() => openInTailor(a)} title="Open in Tailor">
                       Open
                     </Button>
-                    <Button variant="ghost" onClick={() => setSelected(a)}>
+                    <Button variant="ghost" onClick={() => setSelected(a)} title="Preview">
                       View
                     </Button>
-                    <Button variant="ghost" onClick={() => exportOne(a)}>
+                    <Button variant="ghost" onClick={() => exportOne(a)} title="Export resume PDF">
                       PDF
                     </Button>
-                    <Button variant="danger" onClick={() => remove(a)}>
-                      Delete
+                    <Button variant="danger" onClick={() => remove(a)} title="Delete">
+                      ✕
                     </Button>
                   </div>
                 </div>
