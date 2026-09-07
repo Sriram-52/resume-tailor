@@ -43,7 +43,21 @@ export class QueueRunner {
 
   add(urls: string[], baseId: string): QueueItem[] {
     const now = new Date().toISOString()
-    const norm = (u: string): string => u.trim().replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+    // Identity of a posting URL: drop only tracking params and the fragment. Query
+    // params like ?token= or ?gh_jid= ARE the posting id and must be kept.
+    const norm = (raw: string): string => {
+      try {
+        const u = new URL(raw.trim())
+        for (const k of [...u.searchParams.keys()]) {
+          if (/^(utm_|ref$|source$|src$|gh_src$|lever-source$)/i.test(k)) u.searchParams.delete(k)
+        }
+        u.hash = ''
+        u.pathname = u.pathname.replace(/\/+$/, '')
+        return u.toString().toLowerCase()
+      } catch {
+        return raw.trim().toLowerCase()
+      }
+    }
     // Skip anything already queued, already finished in this list, or already saved as an application.
     const seen = new Set(this.items.map((i) => norm(i.url)))
     for (const a of loadApplications()) if (a.jobUrl) seen.add(norm(a.jobUrl))
