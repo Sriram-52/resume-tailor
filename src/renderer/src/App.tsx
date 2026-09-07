@@ -177,6 +177,7 @@ export default function App(): React.JSX.Element {
           <Tailor
             profiles={profiles}
             activeId={activeId}
+            apps={apps}
             onSelectProfile={(id) => persist({ profiles, activeId: id })}
             onSaved={setApps}
             onUpdateProfile={updateProfileResume}

@@ -4,14 +4,18 @@ import { getTemplate, renderCoverLetter } from '../templates'
 import { Button } from '../ui'
 import { pdfFileName } from '../../../shared/filename'
 
-const STATUSES: ApplicationStatus[] = [
-  'draft',
-  'applied',
-  'interviewing',
-  'offer',
-  'rejected',
-  'archived'
+const COLUMNS: { status: ApplicationStatus; label: string }[] = [
+  { status: 'draft', label: 'Draft' },
+  { status: 'applied', label: 'Applied' },
+  { status: 'interviewing', label: 'Interviewing' },
+  { status: 'offer', label: 'Offer' },
+  { status: 'rejected', label: 'Rejected' },
+  { status: 'archived', label: 'Archived' }
 ]
+
+function scoreClass(n: number): string {
+  return n >= 75 ? 'hi' : n >= 50 ? 'mid' : 'lo'
+}
 
 export function Applications({
   apps,
@@ -24,9 +28,11 @@ export function Applications({
   onContinueDraft: (baseId?: string) => void
 }): React.JSX.Element {
   const [selected, setSelected] = useState<Application | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overCol, setOverCol] = useState<ApplicationStatus | null>(null)
 
   /** Reopen a saved application in the Tailor workspace by seeding its draft. */
-  async function continueInTailor(a: Application): Promise<void> {
+  async function openInTailor(a: Application): Promise<void> {
     await window.api.saveDraft({
       jd: a.jobDescription,
       company: a.company,
@@ -44,6 +50,7 @@ export function Applications({
   }
 
   async function setStatus(a: Application, status: ApplicationStatus): Promise<void> {
+    if (a.status === status) return
     const updated = await window.api.saveApplication({ ...a, status })
     setApps(updated)
   }
@@ -56,8 +63,7 @@ export function Applications({
 
   async function exportOne(a: Application): Promise<void> {
     const html = getTemplate(a.template).render(a.tailored)
-    const name = pdfFileName(a.tailored.basics.name, a.company, a.role)
-    await window.api.exportPdf(html, name)
+    await window.api.exportPdf(html, pdfFileName(a.tailored.basics.name, a.company, a.role))
   }
 
   async function exportCover(a: Application): Promise<void> {
@@ -65,14 +71,18 @@ export function Applications({
     const html = renderCoverLetter(a.tailored, a.coverLetter, {
       company: a.company,
       role: a.role,
-      date: new Date().toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
+      date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
     })
-    const name = pdfFileName(a.tailored.basics.name, a.company, a.role, 'cover')
-    await window.api.exportPdf(html, name)
+    await window.api.exportPdf(html, pdfFileName(a.tailored.basics.name, a.company, a.role, 'cover'))
+  }
+
+  function onDrop(status: ApplicationStatus, e: React.DragEvent): void {
+    // Prefer the id carried by the drag itself; state can lag behind fast drags.
+    const id = e.dataTransfer.getData('text/plain') || dragId
+    const a = apps.find((x) => x.id === id)
+    setDragId(null)
+    setOverCol(null)
+    if (a) void setStatus(a, status)
   }
 
   if (apps.length === 0) {
@@ -80,96 +90,102 @@ export function Applications({
       <div className="screen">
         <h2>Applications</h2>
         <div className="panel">
-          <p className="muted">Nothing yet. Tailor a resume and click "Save to tracker".</p>
+          <p className="muted">Nothing yet. Tailor a resume and click "Save to tracker", or add links in Queue.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="screen">
-      <h2>Applications</h2>
-      <table className="apps-table">
-        <thead>
-          <tr>
-            <th>Company</th>
-            <th>Role</th>
-            <th>ATS</th>
-            <th>Date</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {apps.map((a) => (
-            <tr key={a.id}>
-              <td>
-                {a.company}
-                {a.jobUrl && (
-                  <a className="posting-link" href={a.jobUrl} target="_blank" rel="noreferrer">
-                    ↗ posting
-                  </a>
-                )}
-              </td>
-              <td>{a.role}</td>
-              <td>
-                {typeof a.keywordGap?.matchScore === 'number' ? (
-                  <span
-                    className={`ats-cell score-${
-                      a.keywordGap.matchScore >= 75
-                        ? 'hi'
-                        : a.keywordGap.matchScore >= 50
-                          ? 'mid'
-                          : 'lo'
-                    }`}
-                  >
-                    {a.keywordGap.matchScore}
-                  </span>
-                ) : (
-                  <span className="muted">—</span>
-                )}
-              </td>
-              <td>{a.createdAt.slice(0, 10)}</td>
-              <td>
-                <select
-                  value={a.status}
-                  onChange={(e) => setStatus(a, e.target.value as ApplicationStatus)}
-                  className={`status status-${a.status}`}
+    <div className="screen apps">
+      <div className="screen-head">
+        <h2>Applications</h2>
+        <span className="muted">Drag a card between columns to change its status.</span>
+      </div>
+
+      <div className="kanban">
+        {COLUMNS.map((col) => {
+          const cards = apps.filter((a) => a.status === col.status)
+          return (
+            <div
+              key={col.status}
+              className={`kcol ${overCol === col.status ? 'drop-over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (overCol !== col.status) setOverCol(col.status)
+              }}
+              onDragLeave={() => setOverCol((c) => (c === col.status ? null : c))}
+              onDrop={(e) => {
+                e.preventDefault()
+                onDrop(col.status, e)
+              }}
+            >
+              <div className={`kcol-head status-${col.status}`}>
+                <span>{col.label}</span>
+                <span className="kcount">{cards.length}</span>
+              </div>
+              {cards.map((a) => (
+                <div
+                  key={a.id}
+                  className={`kcard ${dragId === a.id ? 'dragging' : ''}`}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragId(a.id)
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', a.id)
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null)
+                    setOverCol(null)
+                  }}
+                  onDoubleClick={() => openInTailor(a)}
+                  title="Double-click to open in Tailor"
                 >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </td>
-              <td className="row-actions">
-                {a.status === 'draft' && (
-                  <Button variant="ghost" onClick={() => continueInTailor(a)}>
-                    Continue
-                  </Button>
-                )}
-                <Button variant="ghost" onClick={() => setSelected(a)}>
-                  View
-                </Button>
-                <Button variant="ghost" onClick={() => exportOne(a)}>
-                  PDF
-                </Button>
-                <Button variant="danger" onClick={() => remove(a)}>
-                  Delete
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  <div className="kcard-title">{a.company}</div>
+                  <div className="kcard-role">{a.role}</div>
+                  <div className="kcard-meta">
+                    {typeof a.keywordGap?.matchScore === 'number' ? (
+                      <span className={`ats-cell score-${scoreClass(a.keywordGap.matchScore)}`}>
+                        {a.keywordGap.matchScore}
+                      </span>
+                    ) : (
+                      <span className="muted">no ATS</span>
+                    )}
+                    <span className="muted">{a.createdAt.slice(0, 10)}</span>
+                    {a.jobUrl && (
+                      <a className="posting-link" href={a.jobUrl} target="_blank" rel="noreferrer">
+                        ↗ posting
+                      </a>
+                    )}
+                  </div>
+                  <div className="kcard-actions">
+                    <Button variant="ghost" onClick={() => openInTailor(a)}>
+                      Open
+                    </Button>
+                    <Button variant="ghost" onClick={() => setSelected(a)}>
+                      View
+                    </Button>
+                    <Button variant="ghost" onClick={() => exportOne(a)}>
+                      PDF
+                    </Button>
+                    <Button variant="danger" onClick={() => remove(a)}>
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {cards.length === 0 && <div className="kempty">Drop here</div>}
+            </div>
+          )
+        })}
+      </div>
 
       {selected && (
         <div className="drawer" onClick={() => setSelected(null)}>
           <div className="drawer-body" onClick={(e) => e.stopPropagation()}>
             <div className="row space">
               <h3>
-                {selected.company} — {selected.role}
+                {selected.company} · {selected.role}
               </h3>
               <Button variant="ghost" onClick={() => setSelected(null)}>
                 Close

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MasterResume, ResumeProfile } from '../../../shared/resume'
 import { emptyMaster } from '../../../shared/resume'
-import type { Application, KeywordGap } from '../../../shared/application'
+import type { Application, ApplicationStatus, KeywordGap } from '../../../shared/application'
 import { getTemplate, renderCoverLetter, templates } from '../templates'
 import { ChatPanel } from './ChatPanel'
 import { DiffView } from './DiffView'
@@ -13,12 +13,15 @@ type Panel = 'preview' | 'ats' | 'cover' | 'job' | 'diff'
 export function Tailor({
   profiles,
   activeId,
+  apps,
   onSelectProfile,
   onSaved,
   onUpdateProfile,
   reloadToken
 }: {
   profiles: ResumeProfile[]
+  /** Saved applications, so the workspace can show and change the status of the one it is editing. */
+  apps: Application[]
   /** The globally selected profile (sidebar). This is the single source of truth. */
   activeId: string
   /** Change the global profile selection. */
@@ -136,6 +139,16 @@ export function Tailor({
       )
     }
     setFetching(false)
+  }
+
+  /** The saved application this draft came from, if any. */
+  const linkedApp = appId ? apps.find((a) => a.id === appId) ?? null : null
+
+  async function changeStatus(status: ApplicationStatus): Promise<void> {
+    if (!linkedApp || linkedApp.status === status) return
+    const updated = await window.api.saveApplication({ ...linkedApp, status })
+    onSaved(updated)
+    setSavedMsg(`Marked as ${status}.`)
   }
 
   async function runAll(): Promise<void> {
@@ -410,6 +423,25 @@ export function Tailor({
             >
               ATS {score}
             </button>
+          )}
+          {jobUrl.trim() && (
+            <a className="posting-link ws-posting" href={jobUrl.trim()} target="_blank" rel="noreferrer" title="Open the job posting">
+              ↗ posting
+            </a>
+          )}
+          {linkedApp && (
+            <select
+              className={`ws-status status status-${linkedApp.status}`}
+              value={linkedApp.status}
+              onChange={(e) => changeStatus(e.target.value as ApplicationStatus)}
+              title="Application status"
+            >
+              {(['draft', 'applied', 'interviewing', 'offer', 'rejected', 'archived'] as ApplicationStatus[]).map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
           )}
         </div>
 
