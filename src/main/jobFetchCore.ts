@@ -167,6 +167,40 @@ async function fromLever(slug: string, jobId: string): Promise<JobPosting | null
   }
 }
 
+// ---- Workday: https://<tenant>.wd<N>.myworkdayjobs.com/[<locale>/]<site>/job/<path> ---
+// The page is a JavaScript shell, but the same host serves the posting as JSON.
+interface WorkdayJob {
+  jobPostingInfo?: { title?: string; location?: string; jobDescription?: string; additionalLocations?: string[] }
+  hiringOrganization?: { name?: string }
+}
+async function fromWorkday(host: string, segs: string[]): Promise<JobPosting | null> {
+  const m = host.match(/^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/)
+  if (!m) return null
+  const tenant = m[1]
+  const rest = segs.slice()
+  if (/^[a-z]{2}-[A-Za-z]{2}$/.test(rest[0] ?? '')) rest.shift() // locale prefix like en-US
+  const jobIdx = rest.indexOf('job')
+  if (jobIdx < 1) return null
+  const site = rest[jobIdx - 1]
+  const path = rest.slice(jobIdx + 1).map(encodeURIComponent).join('/')
+  const d = await getJson<WorkdayJob>(
+    `https://${host}/wday/cxs/${tenant}/${encodeURIComponent(site)}/job/${path}`
+  )
+  const j = d?.jobPostingInfo
+  if (!j?.title) return null
+  const loc = [j.location, ...(j.additionalLocations ?? [])].filter(Boolean).join('; ')
+  // Workday's org name often carries an internal code ("2100 NVIDIA USA"); strip it and
+  // fall back to the tenant name when nothing usable is left.
+  const org = (d?.hiringOrganization?.name ?? '').replace(/^[\d\s-]+/, '').replace(/\s+(USA|US|Inc\.?|LLC)$/i, '').trim()
+  return {
+    company: org && org.length <= 40 ? org : titleCase(tenant),
+    role: j.title,
+    location: loc,
+    description: htmlToText(j.jobDescription ?? ''),
+    source: 'workday'
+  }
+}
+
 // ---- LinkedIn: /jobs/view/<id> has a guest endpoint that needs no login ------
 async function fromLinkedIn(jobId: string): Promise<string | null> {
   try {
@@ -200,6 +234,27 @@ function greenhouseSlugCandidates(html: string, host: string): string[] {
   return out
 }
 
+/**
+ * Greenhouse "embed" links (boards.greenhouse.io/embed/job_app?token=<id>) do not
+ * name the board in the URL; the 301 they return does (?for=<slug>). Resolve the
+ * slug from the query or from that redirect without following it.
+ */
+async function greenhouseEmbedSlug(url: URL): Promise<string | null> {
+  const direct = url.searchParams.get('for')
+  if (direct) return direct
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+    const res = await fetch(url.toString(), { headers: { 'User-Agent': UA }, redirect: 'manual', signal: ctrl.signal })
+    clearTimeout(t)
+    const loc = res.headers.get('location')
+    if (!loc) return null
+    return new URL(loc, url).searchParams.get('for')
+  } catch {
+    return null
+  }
+}
+
 export async function fetchJobSource(rawUrl: string): Promise<FetchResult> {
   let url: URL
   try {
@@ -223,6 +278,17 @@ export async function fetchJobSource(rawUrl: string): Promise<FetchResult> {
     }
     if (host === 'jobs.lever.co' && segs.length >= 2) {
       const p = await fromLever(segs[0], segs[1])
+      if (p) return { ok: true, value: { kind: 'posting', posting: p } }
+    }
+    if (/^(job-)?boards\.greenhouse\.io$/.test(host) && url.searchParams.get('token')) {
+      const slug = await greenhouseEmbedSlug(url)
+      if (slug) {
+        const p = await fromGreenhouse(slug, url.searchParams.get('token')!)
+        if (p) return { ok: true, value: { kind: 'posting', posting: p } }
+      }
+    }
+    if (/\.myworkdayjobs\.com$/.test(host)) {
+      const p = await fromWorkday(host, segs)
       if (p) return { ok: true, value: { kind: 'posting', posting: p } }
     }
     if (/(^|\.)linkedin\.com$/.test(host)) {

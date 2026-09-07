@@ -134,6 +134,12 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+function attachQueue(win: BrowserWindow): void {
+  const q = queue
+  if (!q) return
+  win.webContents.once('did-finish-load', () => q.attach(win))
+}
+
 function registerIpc(): void {
   // App settings (API keys entered from the UI)
   ipcMain.handle('settings:load', () => loadSettings())
@@ -323,16 +329,19 @@ app.whenReady().then(() => {
   registerIpc()
   mainWindow = createWindow()
   queue = new QueueRunner()
-  const q = queue
-  const w = mainWindow
   // Start pumping once the renderer is listening, so no progress event is lost.
-  w.webContents.once('did-finish-load', () => q.attach(w))
+  attachQueue(mainWindow)
   mainWindow.webContents.on('render-process-gone', (_e, d) =>
     logCrash('render-process-gone', JSON.stringify(d))
   )
   app.on('child-process-gone', (_e, d) => logCrash('child-process-gone', JSON.stringify(d)))
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // A fresh window after the last one was closed: point the runner at it so
+      // progress keeps flowing to the UI the user is actually looking at.
+      mainWindow = createWindow()
+      attachQueue(mainWindow)
+    }
   })
 })
 

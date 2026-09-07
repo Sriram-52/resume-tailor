@@ -39,7 +39,14 @@ export function Queue({
 
   useEffect(() => {
     window.api.queueList().then(setItems)
-    return window.api.onQueueEvent(setItems)
+    const off = window.api.onQueueEvent(setItems)
+    // Fallback poll: if a push is ever missed (window re-created, sleep/wake),
+    // the list still catches up within a few seconds.
+    const t = setInterval(() => window.api.queueList().then(setItems), 5000)
+    return () => {
+      off()
+      clearInterval(t)
+    }
   }, [])
 
   const urls = useMemo(

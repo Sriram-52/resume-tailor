@@ -8,5 +8,5 @@ export interface JobPosting {
   role: string
   location: string
   description: string
-  source: 'ashby' | 'greenhouse' | 'lever' | 'linkedin' | 'page'
+  source: 'ashby' | 'greenhouse' | 'lever' | 'workday' | 'linkedin' | 'page'
 }
