@@ -67,7 +67,12 @@ export function Tailor({
 
   // --- Draft auto-save: restore the in-progress session, then persist changes.
   const draftReady = useRef(false)
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   async function restoreDraft(): Promise<void> {
+    // A pending autosave from the previous session must not overwrite the draft
+    // we are about to load, and nothing may autosave until the restore is applied.
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
+    draftReady.current = false
     const d = await window.api.loadDraft()
     if (d) {
       setJd(d.jd)
@@ -101,6 +106,7 @@ export function Tailor({
   useEffect(() => {
     if (!draftReady.current) return
     const t = setTimeout(() => {
+      autosaveTimer.current = null
       window.api.saveDraft({
         jd,
         company,
@@ -115,6 +121,7 @@ export function Tailor({
         appCreatedAt: appCreatedAt ?? undefined
       })
     }, 500)
+    autosaveTimer.current = t
     return () => clearTimeout(t)
   }, [jd, company, role, jobUrl, templateId, activeId, tailored, gap, cover, appId, appCreatedAt])
 
@@ -247,25 +254,31 @@ export function Tailor({
 
   async function saveToTracker(): Promise<void> {
     if (!tailored) return
+    // Update the record this draft came from; failing that, one with the same
+    // posting URL, so re-saving never creates a duplicate.
+    const url = jobUrl.trim()
+    const existing =
+      (appId ? apps.find((a) => a.id === appId) : undefined) ??
+      (url ? apps.find((a) => a.jobUrl && a.jobUrl.trim() === url) : undefined)
     const record: Application = {
-      id: appId ?? crypto.randomUUID(),
+      id: existing?.id ?? crypto.randomUUID(),
       company: company || 'Unknown',
       role: role || tailored.basics.label || 'Unknown',
-      createdAt: appCreatedAt ?? new Date().toISOString(),
-      status: 'draft',
-      jobUrl: jobUrl.trim() || undefined,
+      createdAt: existing?.createdAt ?? appCreatedAt ?? new Date().toISOString(),
+      status: existing?.status ?? 'draft',
+      jobUrl: url || undefined,
       jobDescription: jd,
       baseId: activeId,
       tailored,
       keywordGap: gap,
       coverLetter: cover,
       template: templateId,
-      files: {},
-      notes: ''
+      files: existing?.files ?? {},
+      notes: existing?.notes ?? ''
     }
-    const wasUpdate = appId !== null
-    const apps = await window.api.saveApplication(record)
-    onSaved(apps)
+    const wasUpdate = !!existing
+    const updated = await window.api.saveApplication(record)
+    onSaved(updated)
     resetTailor()
     setSavedMsg(
       wasUpdate

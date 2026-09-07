@@ -3,7 +3,7 @@ import type { BrowserWindow } from 'electron'
 import type { Application, KeywordGap } from '../shared/application'
 import type { MasterResume } from '../shared/resume'
 import { isActive, type QueueItem } from '../shared/queue'
-import { loadProfiles, loadQueue, saveApplication, saveQueue } from './store'
+import { loadApplications, loadProfiles, loadQueue, saveApplication, saveQueue } from './store'
 import { fetchJobPosting } from './jobFetch'
 import { runClaudeJson } from './claude'
 import { keywordGapPrompt, tailorPrompt } from './prompts'
@@ -43,11 +43,14 @@ export class QueueRunner {
 
   add(urls: string[], baseId: string): QueueItem[] {
     const now = new Date().toISOString()
-    const seen = new Set(this.items.filter((i) => isActive(i.status)).map((i) => i.url))
+    const norm = (u: string): string => u.trim().replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+    // Skip anything already queued, already finished in this list, or already saved as an application.
+    const seen = new Set(this.items.map((i) => norm(i.url)))
+    for (const a of loadApplications()) if (a.jobUrl) seen.add(norm(a.jobUrl))
     for (const raw of urls) {
       const url = raw.trim()
-      if (!url || seen.has(url)) continue
-      seen.add(url)
+      if (!url || seen.has(norm(url))) continue
+      seen.add(norm(url))
       this.items.unshift({
         id: randomUUID(),
         url,
