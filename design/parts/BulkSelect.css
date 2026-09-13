@@ -1,0 +1,10 @@
+.selstrip{width:38px;flex-shrink:0;background:#faf8f5;border-right:1px solid #f0ece6;display:flex;align-items:flex-start;justify-content:center;padding-top:18px}
+.selstrip.on{background:#e7f0f1;border-right-color:#cfe0e2}
+.cbox{width:17px;height:17px;border-radius:5px;border:1.5px solid #cfc7bd;background:#fff;display:grid;place-items:center}
+.cbox.on{background:#0f6d7a;border-color:#0f6d7a}
+.bulkbar{height:60px;flex-shrink:0;margin:0 20px 16px;border-radius:12px;background:#191d22;display:flex;align-items:center;gap:12px;padding:0 16px;color:#e3e7ea;box-shadow:0 6px 20px rgba(28,26,23,.16)}
+.bulkbar b{font-size:13px;font-weight:600}
+.bulkbar .sep{width:1px;height:22px;background:#2e343b}
+.pick{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border-radius:8px;background:#2b3138;color:#e3e7ea;font-size:12.5px;font-weight:500;font-family:'IBM Plex Mono',monospace;cursor:pointer}
+.bghost{height:30px;display:flex;align-items:center;padding:0 11px;border-radius:8px;color:#b9c0c7;font-size:12.5px;font-weight:500;cursor:pointer}
+.bghost:hover{background:#2b3138;color:#fff}

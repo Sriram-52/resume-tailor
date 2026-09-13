@@ -87,6 +87,7 @@ export class AgentSession {
   private cover = ''
   private company = ''
   private role = ''
+  private readonly key: string
   private sessionId: string | null = null
   private cancelled = false
   private busy = false
@@ -97,8 +98,11 @@ export class AgentSession {
     jd: string,
     gap: KeywordGap | null = null,
     master: MasterResume = resume,
-    mode: AgentMode = 'tailor'
+    mode: AgentMode = 'tailor',
+    /** Which workspace this session belongs to; stamped on every event. */
+    key = 'master'
   ) {
+    this.key = key
     this.win = win
     this.resume = resume
     // The full master resume (superset). The working `resume` is a tailored
@@ -146,8 +150,14 @@ export class AgentSession {
     this.cover = cover
   }
 
-  private emit(e: ChatEvent): void {
-    if (!this.win.isDestroyed()) this.win.webContents.send(this.channel, e)
+  private emit(event: ChatEvent): void {
+    if (this.win.isDestroyed()) return
+    this.win.webContents.send(this.channel, { key: this.key, event })
+  }
+
+  /** Whether a turn is currently in flight, for the "working" indicator. */
+  isBusy(): boolean {
+    return this.busy
   }
 
   cancel(): void {

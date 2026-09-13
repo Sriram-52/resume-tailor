@@ -3,6 +3,11 @@ import { join, basename, extname } from 'path'
 import { mkdirSync, appendFileSync } from 'fs'
 import { homedir } from 'os'
 import { readFile } from 'fs/promises'
+import * as jobright from './jobright'
+import { JobrightAuthError } from './jobright'
+import { backfillFromJobright, pushStatus } from './sync'
+import type { JobrightJob, SavedFilter } from '../shared/jobright'
+import type { JobrightReply } from '../shared/ipc'
 
 /**
  * Build variant, baked in by electron.vite.config (`__APP_VARIANT__`). A packaged
@@ -39,9 +44,9 @@ import {
   loadProfiles,
   saveProfiles,
   loadApplications,
-  saveApplication,
+  saveApplication, saveApplications,
   deleteApplication,
-  loadDraft,
+  loadDraft, loadDrafts, deleteDraft,
   saveDraft,
   loadJobResults,
   saveJobResults,
@@ -62,7 +67,7 @@ import { AgentSession } from './agent'
 import { getTailorModel } from './config'
 import { searchDice, scoreJobLeads } from './jobs'
 import type { MasterResume, ProfilesState } from '../shared/resume'
-import type { Application, KeywordGap } from '../shared/application'
+import type { Application, KeywordGap, ApplicationStatus } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 import type { AppSettings } from '../shared/settings'
@@ -97,7 +102,12 @@ function stripCoverPreamble(s: string): string {
 
 let mainWindow: BrowserWindow | null = null
 let queue: QueueRunner | null = null
-let chatSession: AgentSession | null = null
+/**
+ * One agent session per open workspace, keyed by application id. Several run at
+ * once — that is the whole point of the tabs — so a session is never replaced
+ * implicitly; closing a tab is what ends one.
+ */
+const chatSessions = new Map<string, AgentSession>()
 let masterSession: AgentSession | null = null
 
 function ensureDirs(): void {
@@ -191,9 +201,14 @@ function registerIpc(): void {
   })
 
   // Draft (in-progress Tailor session)
-  ipcMain.handle('draft:load', () => loadDraft())
-  ipcMain.handle('draft:save', (_e, draft: TailorDraft) => {
-    saveDraft(draft)
+  ipcMain.handle('draft:load', (_e, key: string) => loadDraft(key))
+  ipcMain.handle('draft:loadAll', () => loadDrafts())
+  ipcMain.handle('draft:save', (_e, key: string, draft: TailorDraft) => {
+    saveDraft(key, draft)
+    return true
+  })
+  ipcMain.handle('draft:delete', (_e, key: string) => {
+    deleteDraft(key)
     return true
   })
 
@@ -204,10 +219,79 @@ function registerIpc(): void {
 
   // Tailoring queue
   ipcMain.handle('queue:list', () => queue?.list() ?? [])
-  ipcMain.handle('queue:add', (_e, urls: string[], baseId: string) => queue?.add(urls, baseId) ?? [])
+  ipcMain.handle('queue:add', (_e, jobs: JobrightJob[], baseId: string) => queue?.add(jobs, baseId) ?? [])
+  ipcMain.handle('queue:setConcurrency', (_e, n: number) => {
+    queue?.setConcurrency(n)
+    return true
+  })
   ipcMain.handle('queue:remove', (_e, id: string) => queue?.remove(id) ?? [])
   ipcMain.handle('queue:retry', (_e, id: string) => queue?.retry(id) ?? [])
   ipcMain.handle('queue:clearFinished', () => queue?.clearFinished() ?? [])
+
+  // Jobright: the primary job source and the owner of application status.
+  // Every handler funnels auth failures into a single `needsLogin` shape so the
+  // renderer can show one "Reconnect" banner rather than per-call error text.
+  const jr = async <T>(fn: () => Promise<T>): Promise<JobrightReply<T>> => {
+    try {
+      return { ok: true, data: await fn() }
+    } catch (e) {
+      if (e instanceof JobrightAuthError) return { ok: false, needsLogin: true, error: e.message }
+      return { ok: false, needsLogin: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  ipcMain.handle('jobright:status', () => jobright.status())
+  ipcMain.handle('jobright:login', () => jobright.login(mainWindow))
+  ipcMain.handle('jobright:signOut', () => jobright.signOut())
+  ipcMain.handle('jobright:recommended', (_e, pages?: number) =>
+    jr(async () => jobright.applyLocalFilter(await jobright.listRecommended(pages), loadSettings().localFilter))
+  )
+  ipcMain.handle('jobright:applied', () => jr(() => jobright.listApplied()))
+  ipcMain.handle('jobright:ignore', (_e, jobId: string) => jr(() => jobright.ignore(jobId)))
+  ipcMain.handle('jobright:importUrl', (_e, url: string) => jr(() => jobright.importByUrl(url)))
+  ipcMain.handle('jobright:savedFilters', () => jr(() => jobright.listSavedFilters()))
+  ipcMain.handle('jobright:saveFilter', (_e, f: SavedFilter) =>
+    jr(() => jobright.createSavedFilter(f))
+  )
+  ipcMain.handle('jobright:backfill', () => jr(() => backfillFromJobright()))
+
+  /**
+   * Move a board card. The local record is written first so the UI never waits
+   * on the network; the push to Jobright follows and reports separately, so a
+   * dead session shows as "not synced" rather than losing the move.
+   */
+  ipcMain.handle('apps:setStatus', async (_e, id: string, status: ApplicationStatus) => {
+    const all = loadApplications()
+    const appRecord = all.find((a) => a.id === id)
+    if (!appRecord) return { ok: false, apps: all, synced: false, error: 'No such application.' }
+    appRecord.status = status
+    // Stamp the moment it became an application, once, so the daily goal and
+    // streak count the day it went out rather than the day it was tailored.
+    if (status !== 'draft' && !appRecord.appliedAt) appRecord.appliedAt = new Date().toISOString()
+    saveApplications(all)
+    try {
+      const synced = await pushStatus(appRecord, status)
+      return { ok: true, apps: all, synced }
+    } catch (e) {
+      const needsLogin = e instanceof JobrightAuthError
+      return {
+        ok: true,
+        apps: all,
+        synced: false,
+        needsLogin,
+        error: e instanceof Error ? e.message : String(e)
+      }
+    }
+  })
+
+  /**
+   * Open a posting in the real browser. Applying happens there — the app never
+   * fills a form or submits anything on the user's behalf.
+   */
+  ipcMain.handle('shell:openExternal', (_e, url: string) => {
+    if (!/^https?:\/\//i.test(url)) return false
+    void shell.openExternal(url)
+    return true
+  })
 
   // Job posting fetch (URL -> company/role/description)
   ipcMain.handle('job:fetch', (_e, url: string) => fetchJobPosting(url))
@@ -246,6 +330,7 @@ function registerIpc(): void {
     'chat:start',
     (
       _e,
+      key: string,
       resume: MasterResume,
       jd: string,
       gap: KeywordGap | null,
@@ -255,30 +340,58 @@ function registerIpc(): void {
       cover?: string
     ) => {
       if (!mainWindow) return false
-      chatSession = new AgentSession(mainWindow, resume, jd, gap ?? null, master ?? resume)
-      chatSession.setJobMeta(company ?? '', role ?? '')
-      chatSession.setCover(cover ?? '')
+      // Reopening a tab that already has a live session must not restart it, or
+      // an in-flight turn is lost and its edits never arrive.
+      const existing = chatSessions.get(key)
+      if (existing) {
+        existing.setGap(gap ?? null)
+        existing.setCover(cover ?? '')
+        return true
+      }
+      const session = new AgentSession(
+        mainWindow,
+        resume,
+        jd,
+        gap ?? null,
+        master ?? resume,
+        'tailor',
+        key
+      )
+      session.setJobMeta(company ?? '', role ?? '')
+      session.setCover(cover ?? '')
+      chatSessions.set(key, session)
       return true
     }
   )
-  ipcMain.handle('chat:setGap', (_e, gap: KeywordGap | null) => {
-    chatSession?.setGap(gap ?? null)
+  ipcMain.handle('chat:setGap', (_e, key: string, gap: KeywordGap | null) => {
+    chatSessions.get(key)?.setGap(gap ?? null)
     return true
   })
-  ipcMain.handle('chat:setCover', (_e, cover: string) => {
-    chatSession?.setCover(cover ?? '')
+  ipcMain.handle('chat:setCover', (_e, key: string, cover: string) => {
+    chatSessions.get(key)?.setCover(cover ?? '')
     return true
   })
-  ipcMain.handle('chat:send', async (_e, text: string) => {
-    if (!chatSession) return { ok: false, error: 'No chat session. Tailor a resume first.' }
-    await chatSession.send(text)
+  ipcMain.handle('chat:send', async (_e, key: string, text: string) => {
+    const session = chatSessions.get(key)
+    if (!session) return { ok: false, error: 'No chat session. Tailor a resume first.' }
+    await session.send(text)
     return { ok: true }
   })
-  ipcMain.handle('chat:cancel', () => {
-    chatSession?.cancel()
+  ipcMain.handle('chat:cancel', (_e, key: string) => {
+    chatSessions.get(key)?.cancel()
     return true
   })
-  ipcMain.handle('chat:getResume', () => chatSession?.getResume() ?? null)
+  /** Close a workspace: end its session and stop tracking it. */
+  ipcMain.handle('chat:close', (_e, key: string) => {
+    chatSessions.get(key)?.cancel()
+    chatSessions.delete(key)
+    return true
+  })
+  /** Which workspaces currently have a turn in flight, for the header pill. */
+  ipcMain.handle('chat:busyKeys', () =>
+    [...chatSessions.entries()].filter(([, s]) => s.isBusy()).map(([k]) => k)
+  )
+  ipcMain.handle('chat:getResume', (_e, key: string) => chatSessions.get(key)?.getResume() ?? null)
 
   // Conversational agent for the MASTER resume (separate session + channel so it
   // never collides with the tailoring chat, which stays mounted on another tab).
@@ -334,6 +447,15 @@ app.whenReady().then(() => {
   mainWindow.webContents.on('render-process-gone', (_e, d) =>
     logCrash('render-process-gone', JSON.stringify(d))
   )
+  /**
+   * A renderer exception paints a blank window and leaves no trace anywhere the
+   * user can reach, so mirror its console into the crash log. Warnings and
+   * errors only — info would drown the file.
+   */
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level < 2) return
+    logCrash('renderer', `${message} (${sourceId}:${line})`)
+  })
   app.on('child-process-gone', (_e, d) => logCrash('child-process-gone', JSON.stringify(d)))
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

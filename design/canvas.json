@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",          "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "Jobs / Recommended" },
+    { "file": "Detail.dc.html",        "x": 1560, "y": 0,    "w": 1440, "h": 900, "title": "Job detail pane" },
+    { "file": "BulkSelect.dc.html",    "x": 3120, "y": 0,    "w": 1440, "h": 900, "title": "Bulk select" },
+    { "file": "QueueDrawer.dc.html",   "x": 4680, "y": 0,    "w": 1440, "h": 900, "title": "Queue drawer" },
+    { "file": "Kanban.dc.html",        "x": 0,    "y": 1040, "w": 1440, "h": 900, "title": "Jobs / Applied" },
+    { "file": "ResumeLibrary.dc.html", "x": 1560, "y": 1040, "w": 1440, "h": 900, "title": "Resume" },
+    { "file": "Settings.dc.html",      "x": 3120, "y": 1040, "w": 1440, "h": 900, "title": "Settings" }
+  ],
+  "annotations": [
+    { "id": "direction", "x": 0, "y": -210, "w": 620, "text": "Direction: warm off-white ground (#f5f3f0), petrol accent (#0f6d7a), IBM Plex Sans + Plex Mono for every number.\nCarried over from the current app: 8px button radii, 12px card radii, the 68px score ring at stroke-width 7, 20px pill chips.\nDark mode is a toggle, not the default." },
+    { "id": "twoscores", "x": 4680, "y": -210, "w": 620, "text": "Two scores, never averaged.\nFit = Jobright, dark panel, ring + Experience / Skills / Industry breakdown.\nATS = ours, petrol chip, only appears once a job has been tailored." },
+    { "id": "boardnote", "x": 0, "y": 1990, "w": 620, "text": "Tailored is local-only and never pushed to Jobright. The other five columns are Jobright's own statuses, so the counts reconcile exactly with the 212 already on their side." }
+  ],
+  "launch": { "view": "focused", "file": "Main.dc.html" }
+}

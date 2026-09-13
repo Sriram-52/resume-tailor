@@ -1,11 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { MasterResume, ProfilesState } from '../shared/resume'
 import type { Application, KeywordGap, Suggestion } from '../shared/application'
-import type { ChatEvent } from '../shared/chat'
+import type { ChatEnvelope, ChatEvent } from '../shared/chat'
 import type { TailorDraft } from '../shared/draft'
 import type { JobLead, JobResultsState, JobSearchFilters } from '../shared/jobs'
 import type { JobPosting } from '../shared/jobPosting'
 import type { QueueItem } from '../shared/queue'
+import type { JobrightJob, JobrightStatus, SavedFilter } from '../shared/jobright'
+import type { BackfillResult, JobrightReply, SetStatusReply } from '../shared/ipc'
+import type { ApplicationStatus } from '../shared/application'
 import type { AppSettings } from '../shared/settings'
 import type { UsageState } from '../shared/usage'
 
@@ -59,8 +62,11 @@ const api = {
     base64?: string
   }> => ipcRenderer.invoke('file:pickResume'),
 
-  loadDraft: (): Promise<TailorDraft | null> => ipcRenderer.invoke('draft:load'),
-  saveDraft: (d: TailorDraft): Promise<boolean> => ipcRenderer.invoke('draft:save', d),
+  loadDraft: (key: string): Promise<TailorDraft | null> => ipcRenderer.invoke('draft:load', key),
+  loadDrafts: (): Promise<Record<string, TailorDraft>> => ipcRenderer.invoke('draft:loadAll'),
+  deleteDraft: (key: string): Promise<boolean> => ipcRenderer.invoke('draft:delete', key),
+  saveDraft: (key: string, d: TailorDraft): Promise<boolean> =>
+    ipcRenderer.invoke('draft:save', key, d),
 
   loadApplications: (): Promise<Application[]> => ipcRenderer.invoke('apps:load'),
   saveApplication: (a: Application): Promise<Application[]> => ipcRenderer.invoke('apps:save', a),
@@ -85,10 +91,38 @@ const api = {
   ): Promise<JsonResult<{ coverLetter: string }>> =>
     ipcRenderer.invoke('coverletter:run', m, jd, company, role),
 
+  /** Open a posting in the default browser. */
+  openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Jobright — the job source, and the owner of application status.
+  jobrightStatus: (): Promise<JobrightStatus> => ipcRenderer.invoke('jobright:status'),
+  jobrightLogin: (): Promise<JobrightStatus> => ipcRenderer.invoke('jobright:login'),
+  jobrightSignOut: (): Promise<JobrightStatus> => ipcRenderer.invoke('jobright:signOut'),
+  jobrightRecommended: (pages?: number): Promise<JobrightReply<JobrightJob[]>> =>
+    ipcRenderer.invoke('jobright:recommended', pages),
+  jobrightApplied: (): Promise<JobrightReply<JobrightJob[]>> =>
+    ipcRenderer.invoke('jobright:applied'),
+  jobrightIgnore: (jobId: string): Promise<JobrightReply<void>> =>
+    ipcRenderer.invoke('jobright:ignore', jobId),
+  jobrightImportUrl: (url: string): Promise<JobrightReply<{ taskId: string }>> =>
+    ipcRenderer.invoke('jobright:importUrl', url),
+  jobrightSavedFilters: (): Promise<JobrightReply<SavedFilter[]>> =>
+    ipcRenderer.invoke('jobright:savedFilters'),
+  jobrightSaveFilter: (f: SavedFilter): Promise<JobrightReply<void>> =>
+    ipcRenderer.invoke('jobright:saveFilter', f),
+  jobrightBackfill: (): Promise<JobrightReply<BackfillResult>> =>
+    ipcRenderer.invoke('jobright:backfill'),
+
+  /** Move a board card. Writes locally first, then pushes to Jobright. */
+  setApplicationStatus: (id: string, status: ApplicationStatus): Promise<SetStatusReply> =>
+    ipcRenderer.invoke('apps:setStatus', id, status),
+
   // Tailoring queue
   queueList: (): Promise<QueueItem[]> => ipcRenderer.invoke('queue:list'),
-  queueAdd: (urls: string[], baseId: string): Promise<QueueItem[]> =>
-    ipcRenderer.invoke('queue:add', urls, baseId),
+  queueAdd: (jobs: JobrightJob[], baseId: string): Promise<QueueItem[]> =>
+    ipcRenderer.invoke('queue:add', jobs, baseId),
+  queueSetConcurrency: (n: number): Promise<boolean> =>
+    ipcRenderer.invoke('queue:setConcurrency', n),
   queueRemove: (id: string): Promise<QueueItem[]> => ipcRenderer.invoke('queue:remove', id),
   queueRetry: (id: string): Promise<QueueItem[]> => ipcRenderer.invoke('queue:retry', id),
   queueClearFinished: (): Promise<QueueItem[]> => ipcRenderer.invoke('queue:clearFinished'),
@@ -114,6 +148,8 @@ const api = {
 
   // Conversational agent
   startChat: (
+    /** The workspace this session belongs to (an application id). */
+    key: string,
     m: MasterResume,
     jd: string,
     gap: KeywordGap | null,
@@ -122,11 +158,11 @@ const api = {
     role?: string,
     cover?: string
   ): Promise<boolean> =>
-    ipcRenderer.invoke('chat:start', m, jd, gap, master, company, role, cover),
-  setChatGap: (gap: KeywordGap | null): Promise<boolean> =>
-    ipcRenderer.invoke('chat:setGap', gap),
-  setChatCover: (cover: string): Promise<boolean> =>
-    ipcRenderer.invoke('chat:setCover', cover),
+    ipcRenderer.invoke('chat:start', key, m, jd, gap, master, company, role, cover),
+  setChatGap: (key: string, gap: KeywordGap | null): Promise<boolean> =>
+    ipcRenderer.invoke('chat:setGap', key, gap),
+  setChatCover: (key: string, cover: string): Promise<boolean> =>
+    ipcRenderer.invoke('chat:setCover', key, cover),
 
   // Job discovery
   searchJobs: (
@@ -141,13 +177,21 @@ const api = {
   loadJobResults: (): Promise<JobResultsState | null> => ipcRenderer.invoke('jobs:results:load'),
   saveJobResults: (state: JobResultsState): Promise<boolean> =>
     ipcRenderer.invoke('jobs:results:save', state),
-  sendChat: (text: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('chat:send', text),
-  cancelChat: (): Promise<boolean> => ipcRenderer.invoke('chat:cancel'),
-  getChatResume: (): Promise<MasterResume | null> => ipcRenderer.invoke('chat:getResume'),
-  /** Subscribe to streaming chat events. Returns an unsubscribe function. */
-  onChatEvent: (cb: (e: ChatEvent) => void): (() => void) => {
-    const handler = (_e: unknown, data: ChatEvent): void => cb(data)
+  sendChat: (key: string, text: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('chat:send', key, text),
+  cancelChat: (key: string): Promise<boolean> => ipcRenderer.invoke('chat:cancel', key),
+  /** End a workspace's session for good (closing its tab). */
+  closeChat: (key: string): Promise<boolean> => ipcRenderer.invoke('chat:close', key),
+  /** Workspaces with a turn in flight right now. */
+  busyChatKeys: (): Promise<string[]> => ipcRenderer.invoke('chat:busyKeys'),
+  getChatResume: (key: string): Promise<MasterResume | null> =>
+    ipcRenderer.invoke('chat:getResume', key),
+  /**
+   * Subscribe to streaming chat events for every workspace. The envelope's `key`
+   * says which one, since all sessions share this channel.
+   */
+  onChatEvent: (cb: (key: string, e: ChatEvent) => void): (() => void) => {
+    const handler = (_e: unknown, data: ChatEnvelope): void => cb(data.key, data.event)
     ipcRenderer.on('chat:event', handler)
     return () => ipcRenderer.removeListener('chat:event', handler)
   },
@@ -162,7 +206,8 @@ const api = {
     ipcRenderer.invoke('masterchat:getResume'),
   /** Subscribe to streaming master-chat events. Returns an unsubscribe function. */
   onMasterChatEvent: (cb: (e: ChatEvent) => void): (() => void) => {
-    const handler = (_e: unknown, data: ChatEvent): void => cb(data)
+    // The master editor is still a single session; unwrap its envelope for it.
+    const handler = (_e: unknown, data: ChatEnvelope): void => cb(data.event)
     ipcRenderer.on('masterchat:event', handler)
     return () => ipcRenderer.removeListener('masterchat:event', handler)
   }
