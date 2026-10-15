@@ -368,6 +368,13 @@ export function Settings({
                         {m.label}
                       </SelectItem>
                     ))}
+                    {/* A model saved before it left the list keeps running; show it rather than a blank trigger. */}
+                    {settings.tailorModel &&
+                      !MODEL_OPTIONS.some((m) => m.value === settings.tailorModel) && (
+                        <SelectItem value={settings.tailorModel}>
+                          {settings.tailorModel} (no longer listed)
+                        </SelectItem>
+                      )}
                   </SelectContent>
                 </Select>
               </Field>
