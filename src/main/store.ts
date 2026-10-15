@@ -7,6 +7,7 @@ import type { Application } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobResultsState } from '../shared/jobs'
 import type { QueueItem } from '../shared/queue'
+import type { JobrightJob } from '../shared/jobright'
 import { emptySettings, type AppSettings } from '../shared/settings'
 import {
   emptyTotals,
@@ -31,6 +32,7 @@ const masterPath = (): string => join(dataDir(), 'master.json')
 const profilesPath = (): string => join(dataDir(), 'profiles.json')
 const appsPath = (): string => join(dataDir(), 'applications.json')
 const draftPath = (): string => join(dataDir(), 'draft.json')
+const draftsPath = (): string => join(dataDir(), 'drafts.json')
 const jobResultsPath = (): string => join(dataDir(), 'job-results.json')
 const settingsPath = (): string => join(dataDir(), 'settings.json')
 const usagePath = (): string => join(dataDir(), 'usage.json')
@@ -86,14 +88,40 @@ export function saveProfiles(state: ProfilesState): void {
   writeJson(profilesPath(), state)
 }
 
-// --- Draft (in-progress Tailor session) ----------------------------------
+// --- Drafts (in-progress Tailor sessions, one per open workspace) ----------
 
-export function loadDraft(): TailorDraft | null {
-  return readJson<TailorDraft | null>(draftPath(), null)
+/**
+ * Drafts are keyed by the application they belong to, because several
+ * workspaces are open at once. The legacy single draft.json is folded in the
+ * first time this runs so an in-progress session is not lost on upgrade.
+ */
+export function loadDrafts(): Record<string, TailorDraft> {
+  const drafts = readJson<Record<string, TailorDraft>>(draftsPath(), {})
+  if (Object.keys(drafts).length) return drafts
+  const legacy = readJson<TailorDraft | null>(draftPath(), null)
+  if (legacy) {
+    const key = legacy.appId ?? 'untitled'
+    const migrated = { [key]: legacy }
+    writeJson(draftsPath(), migrated)
+    return migrated
+  }
+  return {}
 }
 
-export function saveDraft(draft: TailorDraft): void {
-  writeJson(draftPath(), draft)
+export function loadDraft(key: string): TailorDraft | null {
+  return loadDrafts()[key] ?? null
+}
+
+export function saveDraft(key: string, draft: TailorDraft): void {
+  const all = loadDrafts()
+  all[key] = draft
+  writeJson(draftsPath(), all)
+}
+
+export function deleteDraft(key: string): void {
+  const all = loadDrafts()
+  delete all[key]
+  writeJson(draftsPath(), all)
 }
 
 // --- Applications --------------------------------------------------------
@@ -184,4 +212,22 @@ export function recordUsage(e: UsageEntry): void {
 
 export function resetUsage(): void {
   writeJson(usagePath(), emptyUsage())
+}
+
+/** Replace the whole applications list (used by the Jobright backfill). */
+export function saveApplications(all: Application[]): Application[] {
+  writeJson(appsPath(), all)
+  return all
+}
+
+// --- Externally added jobs (pasted URLs) -----------------------------------
+
+const externalPath = (): string => join(dataDir(), 'external.json')
+
+export function loadExternal(): JobrightJob[] {
+  return readJson<JobrightJob[]>(externalPath(), [])
+}
+
+export function saveExternal(jobs: JobrightJob[]): void {
+  writeJson(externalPath(), jobs)
 }

@@ -1,0 +1,9 @@
+shared token reference (not an artboard)
+ground #f5f3f0 | card #ffffff | border #e6e1da | border2 #d6cfc6
+text #1c1a17 | muted #6f6a63 | faint #9c958b
+accent #0f6d7a | accentHover #0b5a66 | accentSoft #e7f0f1
+dark #191d22 | dark2 #21262c
+ok #2f8a4f | warn #b8762a | err #b3402f
+ringHi #5cd38a | ringMid #f0b23c | ringLo #ef7a6a
+font 'IBM Plex Sans' | mono 'IBM Plex Mono'
+radii: btn 8 card 12 chip 20 input 8 | rail 72

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { cn } from '../lib/utils'
 import type { MasterResume } from '../../../shared/resume'
 import type { Token } from '../diff'
 import { diffResume } from '../diff'
@@ -6,7 +7,7 @@ import { diffResume } from '../diff'
 /** Render a word-diff token stream with add/del highlighting. */
 function Tokens({ tokens }: { tokens: Token[] }): React.JSX.Element {
   return (
-    <span className="diff-text">
+    <span className="leading-relaxed">
       {tokens.map((t, i) =>
         t.t === 'same' ? (
           <span key={i}>{t.s}</span>
@@ -21,9 +22,12 @@ function Tokens({ tokens }: { tokens: Token[] }): React.JSX.Element {
 }
 
 const Chips = ({ items, kind }: { items: string[]; kind: 'add' | 'del' }): React.JSX.Element => (
-  <span className="diff-chips">
+  <span className="inline-flex flex-wrap gap-1.5 align-middle">
     {items.map((s, i) => (
-      <span key={i} className={`diff-chip ${kind}`}>
+      <span key={i} className={cn(
+        'rounded-[20px] px-2 py-px text-[11.5px]',
+        kind === 'add' ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger line-through'
+      )}>
         {kind === 'add' ? '+' : '−'} {s}
       </span>
     ))}
@@ -45,30 +49,30 @@ export function DiffView({
   const d = useMemo(() => diffResume(base, tailored), [base, tailored])
 
   if (!d.hasChanges) {
-    return <p className="muted">No changes from the base resume yet. Tailor or edit to see a diff.</p>
+    return <p className="text-[13px] text-muted-foreground">No changes from the base resume yet. Tailor or edit to see a diff.</p>
   }
 
   return (
     <div className="diff">
       {d.headline && (
-        <section className="diff-sec">
+        <section className="mb-4">
           <h4>Headline</h4>
           <Tokens tokens={[{ t: 'del', s: d.headline.old }, { t: 'add', s: ' ' + d.headline.new }]} />
         </section>
       )}
 
       {d.summary && (
-        <section className="diff-sec">
+        <section className="mb-4">
           <h4>Summary</h4>
           <Tokens tokens={d.summary} />
         </section>
       )}
 
       {d.roles.map((r) => (
-        <section className="diff-sec" key={r.company}>
+        <section className="mb-4" key={r.company}>
           <h4>
             {r.company}
-            {r.isNew && <span className="diff-tag add">new to tailored</span>}
+            {r.isNew && <span className="ml-2 rounded-[20px] px-1.5 py-px text-[11px] text-muted-foreground bg-ok/15 text-ok">new to tailored</span>}
           </h4>
           {r.position && (
             <div className="diff-line">
@@ -97,13 +101,13 @@ export function DiffView({
             </div>
           )}
           {r.bullets.unchanged > 0 && (
-            <div className="diff-meta">{r.bullets.unchanged} bullet(s) unchanged</div>
+            <div className="mt-1 text-[11px] italic text-muted-foreground">{r.bullets.unchanged} bullet(s) unchanged</div>
           )}
         </section>
       ))}
 
       {d.skills.length > 0 && (
-        <section className="diff-sec">
+        <section className="mb-4">
           <h4>Skills</h4>
           {d.skills.map((s) => (
             <div className="diff-line" key={s.category}>
@@ -115,7 +119,7 @@ export function DiffView({
       )}
 
       {(d.projects.added.length > 0 || d.projects.removed.length > 0) && (
-        <section className="diff-sec">
+        <section className="mb-4">
           <h4>Projects</h4>
           <div className="diff-line">
             <Chips items={d.projects.added} kind="add" />
@@ -125,7 +129,7 @@ export function DiffView({
       )}
 
       {d.contact.length > 0 && (
-        <section className="diff-sec">
+        <section className="mb-4">
           <h4>Contact</h4>
           {d.contact.map((c) => (
             <div className="diff-line" key={c.field}>

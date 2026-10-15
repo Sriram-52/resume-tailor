@@ -2,32 +2,37 @@ import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import type { Application, KeywordGap } from '../shared/application'
 import type { MasterResume } from '../shared/resume'
-import { isActive, type QueueItem } from '../shared/queue'
+import type { JobrightJob } from '../shared/jobright'
+import { DEFAULT_CONCURRENCY, isActive, type QueueItem } from '../shared/queue'
 import { loadApplications, loadProfiles, loadQueue, saveApplication, saveQueue } from './store'
-import { fetchJobPosting } from './jobFetch'
+import { assembleJd } from './jobDescription'
 import { runClaudeJson } from './claude'
 import { keywordGapPrompt, tailorPrompt } from './prompts'
 import { getTailorModel } from './config'
-
-/** How many postings are processed at once. Each step is a separate CLI call. */
-const CONCURRENCY = 2
 
 /**
  * Background runner for the tailoring queue. Items live in queue.json so a
  * restart picks up where it left off; anything mid-flight when the app quit is
  * simply re-queued. Progress is pushed to the renderer over `queue:event`, and
  * every finished item is saved as a draft Application (pushed over
- * `apps:changed`) so it shows up in the tracker immediately.
+ * `apps:changed`) so it shows up on the board immediately.
+ *
+ * Identity is Jobright's `jobId`, not a URL: the same posting reposted across
+ * three locations is one job, and there is no URL normalisation to get wrong.
  */
 export class QueueRunner {
   private items: QueueItem[]
   private running = 0
   private win: BrowserWindow | null = null
+  private concurrency = DEFAULT_CONCURRENCY
 
   constructor() {
-    this.items = loadQueue().map((i) =>
-      isActive(i.status) ? { ...i, status: 'queued' as const, error: undefined } : i
-    )
+    this.items = loadQueue()
+      // Items written before the queue keyed on Jobright ids carry a bare URL and
+      // no job snapshot. There is nothing to re-run them from, and the renderer
+      // reads `job.title`, so they are dropped rather than migrated.
+      .filter((i) => !!i?.job?.jobId)
+      .map((i) => (isActive(i.status) ? { ...i, status: 'queued' as const, error: undefined } : i))
     this.persist()
   }
 
@@ -41,42 +46,34 @@ export class QueueRunner {
     return this.items
   }
 
-  add(urls: string[], baseId: string): QueueItem[] {
+  /**
+   * Queue a batch of jobs. Anything already queued, already finished in this
+   * list, or already saved as an application is skipped, so re-selecting a
+   * page of the feed is harmless.
+   */
+  add(jobs: JobrightJob[], baseId: string): QueueItem[] {
     const now = new Date().toISOString()
-    // Identity of a posting URL: drop only tracking params and the fragment. Query
-    // params like ?token= or ?gh_jid= ARE the posting id and must be kept.
-    const norm = (raw: string): string => {
-      try {
-        const u = new URL(raw.trim())
-        for (const k of [...u.searchParams.keys()]) {
-          if (/^(utm_|ref$|source$|src$|gh_src$|lever-source$)/i.test(k)) u.searchParams.delete(k)
-        }
-        u.hash = ''
-        u.pathname = u.pathname.replace(/\/+$/, '')
-        return u.toString().toLowerCase()
-      } catch {
-        return raw.trim().toLowerCase()
-      }
-    }
-    // Skip anything already queued, already finished in this list, or already saved as an application.
-    const seen = new Set(this.items.map((i) => norm(i.url)))
-    for (const a of loadApplications()) if (a.jobUrl) seen.add(norm(a.jobUrl))
-    for (const raw of urls) {
-      const url = raw.trim()
-      if (!url || seen.has(norm(url))) continue
-      seen.add(norm(url))
-      this.items.unshift({
+    const seen = new Set(this.items.map((i) => i.jobId))
+    for (const a of loadApplications()) if (a.jobId) seen.add(a.jobId)
+    const added: QueueItem[] = []
+    for (const job of jobs) {
+      if (!job?.jobId || seen.has(job.jobId)) continue
+      seen.add(job.jobId)
+      added.push({
         id: randomUUID(),
-        url,
+        jobId: job.jobId,
+        job,
         baseId,
         status: 'queued',
-        company: '',
-        role: '',
         matchScore: null,
+        jdSource: null,
+        jdNote: '',
         createdAt: now,
         updatedAt: now
       })
     }
+    // Queue order matches selection order, so the top of the feed is tailored first.
+    this.items.unshift(...added)
     this.persist()
     this.emit()
     this.pump()
@@ -107,6 +104,11 @@ export class QueueRunner {
     return this.items
   }
 
+  setConcurrency(n: number): void {
+    this.concurrency = Math.max(1, Math.min(6, Math.round(n)))
+    this.pump()
+  }
+
   // ---- internals -----------------------------------------------------------
 
   private persist(): void {
@@ -132,7 +134,7 @@ export class QueueRunner {
   }
 
   private pump(): void {
-    while (this.running < CONCURRENCY) {
+    while (this.running < this.concurrency) {
       const next = this.items.find((i) => i.status === 'queued')
       if (!next) return
       this.running++
@@ -150,19 +152,17 @@ export class QueueRunner {
         this.update(it, { status: 'error', error: 'The base resume profile no longer exists.' })
         return
       }
+      const job = it.job
 
+      // Assembling the description never fails: Jobright's structured version is
+      // always there, so a dead apply link degrades the result instead of the item.
       this.update(it, { status: 'fetching' })
-      const fetched = await fetchJobPosting(it.url)
+      const jd = await assembleJd(job)
       if (!this.stillWanted(it.id)) return
-      if (!fetched.ok || !fetched.data) {
-        this.update(it, { status: 'error', error: fetched.error ?? 'Could not fetch the posting.' })
-        return
-      }
-      const posting = fetched.data
-      this.update(it, { status: 'tailoring', company: posting.company, role: posting.role })
+      this.update(it, { status: 'tailoring', jdSource: jd.source, jdNote: jd.note })
 
       const model = getTailorModel()
-      const tailored = await runClaudeJson<MasterResume>(tailorPrompt(base, posting.description), {
+      const tailored = await runClaudeJson<MasterResume>(tailorPrompt(base, jd.text), {
         model,
         kind: 'tailor'
       })
@@ -173,27 +173,33 @@ export class QueueRunner {
       }
 
       this.update(it, { status: 'scoring' })
-      const gap = await runClaudeJson<KeywordGap>(
-        keywordGapPrompt(tailored.data, posting.description),
-        { model, kind: 'keywordgap' }
-      )
+      const gap = await runClaudeJson<KeywordGap>(keywordGapPrompt(tailored.data, jd.text), {
+        model,
+        kind: 'keywordgap'
+      })
       if (!this.stillWanted(it.id)) return
 
       const record: Application = {
         id: randomUUID(),
-        company: posting.company || 'Unknown',
-        role: posting.role || tailored.data.basics.label || 'Unknown',
+        jobId: job.jobId,
+        fit: job.fit,
+        source: 'jobright',
+        jdSource: jd.source,
+        workModel: job.workModel || undefined,
+        location: job.location || undefined,
+        company: job.company || 'Unknown',
+        role: job.title || tailored.data.basics.label || 'Unknown',
         createdAt: new Date().toISOString(),
         status: 'draft',
-        jobUrl: it.url,
-        jobDescription: posting.description,
+        jobUrl: job.applyUrl,
+        jobDescription: jd.text,
         baseId: it.baseId,
         tailored: tailored.data,
         keywordGap: gap.ok && gap.data ? gap.data : null,
         coverLetter: null,
         template: 'classic',
         files: {},
-        notes: posting.location ? `Location: ${posting.location}` : ''
+        notes: job.location ? `Location: ${job.location}` : ''
       }
       const apps = saveApplication(record)
       this.emitApps(apps)

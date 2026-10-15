@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { cn } from '../lib/utils'
 import type {
   MasterResume,
   WorkItem,
@@ -142,11 +143,11 @@ export function MasterEditor({
   }
 
   return (
-    <div className="screen">
-      <div className="screen-head">
+    <div className="mx-auto w-full max-w-[1100px] flex-1 overflow-y-auto px-7 py-6">
+      <div className="flex items-center justify-between">
         <h2>Master resume</h2>
-        <div className="row">
-          {saved && <span className="ok-badge">Saved</span>}
+        <div className="flex items-center gap-2.5">
+          {saved && <span className="text-[12px] text-ok">Saved</span>}
           <select
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
@@ -164,16 +165,16 @@ export function MasterEditor({
           <Button onClick={save}>Save</Button>
         </div>
       </div>
-      <p className="muted">
+      <p className="text-[13px] text-muted-foreground">
         Your full career superset. Tailoring picks and rewrites from this. Import once, then keep it
         updated.
       </p>
-      {exportMsg && <div className="ok-box">{exportMsg}</div>}
-      {exportErr && <div className="err-box">{exportErr}</div>}
+      {exportMsg && <div className="mt-2.5 break-words rounded-[8px] border border-ok/30 bg-ok/10 px-3 py-2 text-[13px] text-ok">{exportMsg}</div>}
+      {exportErr && <div className="mt-2.5 whitespace-pre-wrap rounded-[8px] border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">{exportErr}</div>}
 
-      <div className="profile-bar">
+      <div className="mt-3.5 flex items-end justify-between gap-4 rounded-[12px] border border-border bg-card p-4">
         <Field label="Profile name" value={profileName} onChange={onRename} />
-        <div className="row">
+        <div className="flex items-center gap-2.5">
           <Button variant="ghost" onClick={onDuplicate}>
             Duplicate
           </Button>
@@ -186,27 +187,27 @@ export function MasterEditor({
       </div>
 
       {/* AI assistant */}
-      <details className="panel" open={!!master.basics.name}>
+      <details className="mt-4 rounded-[12px] border border-border bg-card p-4" open={!!master.basics.name}>
         <summary>✨ Ask AI to update this resume</summary>
         <MasterChatPanel master={master} onApply={onAiEdit} />
       </details>
 
       {/* Import */}
-      <details className="panel" open={!master.basics.name}>
+      <details className="mt-4 rounded-[12px] border border-border bg-card p-4" open={!master.basics.name}>
         <summary>Import from an existing resume</summary>
-        <p className="muted">
+        <p className="text-[13px] text-muted-foreground">
           Import your resume file (PDF, Word, or text) — Claude parses it into the fields below. Or
           paste the text manually.
         </p>
-        <div className="row">
+        <div className="flex items-center gap-2.5">
           <Button onClick={runImportFile} disabled={importing}>
             {importing ? <Spinner text="Reading & parsing…" /> : 'Import file (PDF, Word…)'}
           </Button>
-          <span className="muted">PDF · DOCX · TXT · MD</span>
+          <span className="text-[13px] text-muted-foreground">PDF · DOCX · TXT · MD</span>
         </div>
-        {importError && <div className="err-box">{importError}</div>}
+        {importError && <div className="mt-2.5 whitespace-pre-wrap rounded-[8px] border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">{importError}</div>}
 
-        <details className="paste-fallback">
+        <details className="mt-3">
           <summary>…or paste text instead</summary>
           <Area
             value={importText}
@@ -221,9 +222,9 @@ export function MasterEditor({
       </details>
 
       {/* Basics */}
-      <section className="panel">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
         <h3>Basics</h3>
-        <div className="grid2">
+        <div className="grid grid-cols-2 gap-x-3.5">
           <Field label="Name" value={master.basics.name} onChange={(v) => patchBasics('name', v)} />
           <Field label="Headline" value={master.basics.label} onChange={(v) => patchBasics('label', v)} />
           <Field label="Email" value={master.basics.email} onChange={(v) => patchBasics('email', v)} />
@@ -237,8 +238,8 @@ export function MasterEditor({
       </section>
 
       {/* Work */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Experience</h3>
           <Button
             variant="ghost"
@@ -259,14 +260,17 @@ export function MasterEditor({
           </Button>
         </div>
         {master.work.map((w, i) => (
-          <div className={`sub-item ${flash === `work-${i}` ? 'flash' : ''}`} id={`work-${i}`} key={i}>
-            <div className="grid2">
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `work-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`work-${i}`} key={i}>
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Position" value={w.position} onChange={(v) => updateList('work', i, { ...w, position: v })} />
               <Field label="Company" value={w.company} onChange={(v) => updateList('work', i, { ...w, company: v })} />
               <Field label="Location" value={w.location} onChange={(v) => updateList('work', i, { ...w, location: v })} />
               <Field label="Start" value={w.startDate} onChange={(v) => updateList('work', i, { ...w, startDate: v })} />
               <Field label="End" value={w.endDate} onChange={(v) => updateList('work', i, { ...w, endDate: v })} />
-              <label className="field checkbox">
+              <label className="flex flex-col gap-1.5 flex-row items-center gap-2">
                 <span>Current</span>
                 <input
                   type="checkbox"
@@ -294,8 +298,8 @@ export function MasterEditor({
       </section>
 
       {/* Projects */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Projects</h3>
           <Button
             variant="ghost"
@@ -307,8 +311,11 @@ export function MasterEditor({
           </Button>
         </div>
         {master.projects.map((p, i) => (
-          <div className={`sub-item ${flash === `projects-${i}` ? 'flash' : ''}`} id={`projects-${i}`} key={i}>
-            <div className="grid2">
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `projects-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`projects-${i}`} key={i}>
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Name" value={p.name} onChange={(v) => updateList('projects', i, { ...p, name: v })} />
               <Field label="URL" value={p.url} onChange={(v) => updateList('projects', i, { ...p, url: v })} />
             </div>
@@ -328,16 +335,19 @@ export function MasterEditor({
       </section>
 
       {/* Skills */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Skills</h3>
           <Button variant="ghost" onClick={() => addTo<SkillGroup>('skills', { category: '', items: [] })}>
             + Add group
           </Button>
         </div>
         {master.skills.map((s, i) => (
-          <div className={`sub-item ${flash === `skills-${i}` ? 'flash' : ''}`} id={`skills-${i}`} key={i}>
-            <div className="grid2">
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `skills-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`skills-${i}`} key={i}>
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Category" value={s.category} onChange={(v) => updateList('skills', i, { ...s, category: v })} />
             </div>
             <CsvField label="Items (comma-separated)" value={s.items} onChange={(v) => updateList('skills', i, { ...s, items: v })} />
@@ -349,8 +359,8 @@ export function MasterEditor({
       </section>
 
       {/* Education */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Education</h3>
           <Button
             variant="ghost"
@@ -370,8 +380,11 @@ export function MasterEditor({
           </Button>
         </div>
         {master.education.map((e, i) => (
-          <div className={`sub-item ${flash === `education-${i}` ? 'flash' : ''}`} id={`education-${i}`} key={i}>
-            <div className="grid2">
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `education-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`education-${i}`} key={i}>
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Institution" value={e.institution} onChange={(v) => updateList('education', i, { ...e, institution: v })} />
               <Field label="Degree" value={e.studyType} onChange={(v) => updateList('education', i, { ...e, studyType: v })} />
               <Field label="Field" value={e.area} onChange={(v) => updateList('education', i, { ...e, area: v })} />
@@ -387,8 +400,8 @@ export function MasterEditor({
       </section>
 
       {/* Certifications */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Certifications</h3>
           <Button
             variant="ghost"
@@ -398,8 +411,11 @@ export function MasterEditor({
           </Button>
         </div>
         {master.certifications.map((c, i) => (
-          <div className={`sub-item ${flash === `certifications-${i}` ? 'flash' : ''}`} id={`certifications-${i}`} key={i}>
-            <div className="grid2">
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `certifications-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`certifications-${i}`} key={i}>
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Name" value={c.name} onChange={(v) => updateList('certifications', i, { ...c, name: v })} />
               <Field label="Issuer" value={c.issuer} onChange={(v) => updateList('certifications', i, { ...c, issuer: v })} />
               <Field label="Date" value={c.date} onChange={(v) => updateList('certifications', i, { ...c, date: v })} />
@@ -412,8 +428,8 @@ export function MasterEditor({
       </section>
 
       {/* Publications */}
-      <section className="panel">
-        <div className="panel-head">
+      <section className="mt-4 rounded-[12px] border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
           <h3>Publications</h3>
           <Button
             variant="ghost"
@@ -431,9 +447,12 @@ export function MasterEditor({
           </Button>
         </div>
         {(master.publications ?? []).map((p, i) => (
-          <div className={`sub-item ${flash === `publications-${i}` ? 'flash' : ''}`} id={`publications-${i}`} key={i}>
+          <div className={cn(
+                'mt-2.5 rounded-[8px] border border-border bg-surface p-3 transition-[border-color,box-shadow] duration-300',
+                flash === `publications-${i}` && 'border-primary ring-[3px] ring-primary/25'
+              )} id={`publications-${i}`} key={i}>
             <Field label="Title" value={p.title} onChange={(v) => updateList('publications', i, { ...p, title: v })} full />
-            <div className="grid2">
+            <div className="grid grid-cols-2 gap-x-3.5">
               <Field label="Venue (journal/conference)" value={p.venue} onChange={(v) => updateList('publications', i, { ...p, venue: v })} />
               <Field label="Date" value={p.date} onChange={(v) => updateList('publications', i, { ...p, date: v })} />
             </div>

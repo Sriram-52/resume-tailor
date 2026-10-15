@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '../lib/utils'
 import type { MasterResume } from '../../../shared/resume'
 import { Button, Spinner } from '../ui'
 import { Markdown } from '../markdown'
@@ -99,25 +100,30 @@ export function MasterChatPanel({
   }
 
   return (
-    <div className="panel chat">
-      <p className="muted">
+    <div className="mt-4 rounded-[12px] border border-border bg-card p-4 flex min-w-0 flex-1 flex-col">
+      <p className="text-[13px] text-muted-foreground">
         Describe real changes and they&apos;re applied to the fields below and saved automatically:
         &quot;I built a project called PromptForge&quot;, &quot;add my AWS Solutions Architect
         cert&quot;, &quot;I started a new role at Acme in March&quot;, &quot;rewrite my summary to
         emphasize AI work&quot;.
       </p>
 
-      <div className="chat-log" ref={scrollRef}>
+      <div className="mt-2.5 flex max-h-[40vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-1 [&>*]:shrink-0" ref={scrollRef}>
         {messages.length === 0 && (
-          <div className="chat-empty">Tell the assistant what to add or change.</div>
+          <div className="px-1 py-4 text-[13px] text-muted-foreground">Tell the assistant what to add or change.</div>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`chat-msg chat-${m.role}`}>
+          <div key={i} className={cn(
+            'max-w-[92%] break-words rounded-[10px] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap',
+            m.role === 'user'
+              ? 'self-end bg-primary font-medium text-primary-foreground'
+              : 'self-start whitespace-normal border border-border bg-surface'
+          )}>
             {m.role === 'assistant' ? (
               m.text ? (
                 <Markdown text={m.text} />
               ) : busy ? (
-                <span className="caret">▍</span>
+                <span className="animate-pulse opacity-50">▍</span>
               ) : (
                 ''
               )
@@ -127,13 +133,13 @@ export function MasterChatPanel({
           </div>
         ))}
         {status && (
-          <div className="chat-status">
+          <div className="self-start px-1 py-0.5 text-[12px] text-muted-foreground">
             <Spinner text={status} />
           </div>
         )}
       </div>
 
-      <div className="chat-input">
+      <div className="mt-2.5">
         <textarea
           ref={inputRef}
           value={input}
@@ -151,7 +157,7 @@ export function MasterChatPanel({
             }
           }}
         />
-        <div className="chat-actions">
+        <div className="mt-2 flex items-center gap-2.5">
           {busy ? (
             <Button variant="danger" onClick={cancel}>
               Stop
@@ -161,7 +167,7 @@ export function MasterChatPanel({
               Send
             </Button>
           )}
-          <span className="muted chat-hint">⌘↵ to send</span>
+          <span className="text-[13px] text-muted-foreground text-[11px]">⌘↵ to send</span>
         </div>
       </div>
     </div>

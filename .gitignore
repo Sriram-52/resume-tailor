@@ -8,3 +8,6 @@ release-dev
 .DS_Store
 .env
 .env.*
+
+# Seeded design-canvas payload: a ~2.5MB build artifact, rebuilt from design/*.dc.html
+design/resume-tailor-redesign.html

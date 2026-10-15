@@ -1,0 +1,34 @@
+.screen{flex:1;padding:26px 30px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.shead h2{margin:0;font-size:21px;font-weight:600;letter-spacing:-.4px}
+.sub{margin:5px 0 0;font-size:12.5px;color:#6f6a63;max-width:560px;text-wrap:pretty}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:16px;min-height:0;overflow:hidden}
+.colL,.colR{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pnl{background:#fff;border:1px solid #e6e1da;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(28,26,23,.04)}
+.pnlh{padding:11px 16px;font-size:11px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:#6f6a63;background:#faf8f5;border-bottom:1px solid #e6e1da}
+.pnlhint{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;color:#9c958b;margin-left:8px}
+.pnlb{padding:16px;display:flex;flex-direction:column;gap:14px}
+.f{display:flex;flex-direction:column;gap:6px}
+.f label{font-size:11.5px;font-weight:600;color:#413c36}
+.fhint{font-size:11px;line-height:1.5;color:#9c958b;text-wrap:pretty}
+.inp{height:32px;border:1px solid #e6e1da;border-radius:8px;background:#fff;display:flex;align-items:center;padding:0 11px;font-size:12.5px;color:#1c1a17}
+.inp.mono{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.inp.sel{justify-content:space-between;background:#faf8f5;cursor:pointer}
+.conn{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid #f0ece6;border-radius:10px;background:#faf8f5}
+.cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cdot.ok{background:#2f8a4f;box-shadow:0 0 0 3px rgba(47,138,79,.15)}
+.cdot.warn{background:#b8762a;box-shadow:0 0 0 3px rgba(184,118,42,.15)}
+.bghost{height:30px;display:flex;align-items:center;padding:0 11px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.tgs{display:flex;flex-direction:column;gap:11px;padding:13px;border-radius:10px;background:#faf8f5;border:1px solid #f0ece6}
+.tg{display:flex;gap:10px;align-items:flex-start}
+.sw{width:30px;height:18px;border-radius:20px;background:#ddd6cd;flex-shrink:0;padding:2px;display:flex;margin-top:1px}
+.sw i{width:14px;height:14px;border-radius:50%;background:#fff;display:block;box-shadow:0 1px 2px rgba(28,26,23,.2)}
+.sw.on{background:#0f6d7a;justify-content:flex-end}
+.tglbl{font-size:12.5px;font-weight:500;color:#1c1a17}
+.cl{display:flex;flex-wrap:wrap;gap:5px}
+.clc{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 8px;border-radius:20px;background:#f0ece6;color:#57524b}
+.clc svg{color:#a9a29a}
+.clc.add{background:#fff;border:1px dashed #d6cfc6;color:#0f6d7a;font-weight:600}
+.split{border-top:1px dashed #e6e1da;padding-top:14px;margin-top:2px}
+.splbl{font-size:11px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:#6f6a63}
+.splbl .fhint{display:inline;font-weight:400;letter-spacing:0;text-transform:none;margin-left:7px}
