@@ -147,6 +147,13 @@ export default function App(): React.JSX.Element {
 
   const loadFeed = useCallback(
     async (which: JobrightFeed): Promise<void> => {
+      if (which === 'external') {
+        setJobs((prev) => ({ ...prev, external: [] }))
+        setLoadedFeeds((f) => ({ ...f, external: true }))
+        const list = await window.api.externalList()
+        setJobs((prev) => ({ ...prev, external: list }))
+        return
+      }
       if (which !== 'recommended') return
       setFeedLoading(true)
       setLoadedFeeds((f) => ({ ...f, [which]: true }))
@@ -166,6 +173,26 @@ export default function App(): React.JSX.Element {
     if (loadedFeeds[feed]) return
     void loadFeed(feed)
   }, [rail, feed, jr?.connected, loadedFeeds, loadFeed])
+
+  /**
+   * Add a job by URL. Fetched with the same resolver the Tailor form uses, then
+   * shaped into the feed's job type so it queues, tailors and tracks exactly
+   * like a Jobright one. Registration with Jobright happens in the background
+   * and is allowed to fail — the job is usable here regardless.
+   */
+  async function addExternal(url: string): Promise<boolean> {
+    const r = await window.api.externalAdd(url)
+    if (!r.ok || !r.job) {
+      toast.error(r.error ?? 'Could not read that posting.')
+      return false
+    }
+    setJobs((prev) => ({
+      ...prev,
+      external: [r.job as JobrightJob, ...prev.external.filter((j) => j.jobId !== r.job?.jobId)]
+    }))
+    toast.success(`Added ${r.job.company} — ${r.job.title}`)
+    return true
+  }
 
   async function connect(): Promise<void> {
     const s = await window.api.jobrightLogin()
@@ -284,6 +311,18 @@ export default function App(): React.JSX.Element {
     setTailorOpen(true)
   }
 
+  /**
+   * Open a blank workspace for a job that exists only as pasted text. No draft
+   * is seeded, so the Tailor intake form shows empty; saving from it creates
+   * the application record.
+   */
+  function openBlank(): void {
+    const id = crypto.randomUUID()
+    setTabs((t) => [...t, id])
+    setActiveTab(id)
+    setTailorOpen(true)
+  }
+
   /** Close a workspace for good: end its agent session and drop its draft. */
   function closeTab(id: string): void {
     void window.api.closeChat(id)
@@ -299,7 +338,7 @@ export default function App(): React.JSX.Element {
   const busyCount = Object.values(busyTabs).filter(Boolean).length
   const tabLabel = (id: string): { company: string; role: string } => {
     const a = apps.find((x) => x.id === id)
-    return { company: a?.company ?? 'Untitled', role: a?.role ?? '' }
+    return { company: a?.company ?? 'New job', role: a?.role ?? '' }
   }
 
   // ---- keyboard ----------------------------------------------------------
@@ -468,11 +507,6 @@ export default function App(): React.JSX.Element {
                   onView={setBoardView}
                   dailyGoal={settings.dailyGoal}
                 />
-              ) : feed === 'external' ? (
-                <div className="grid flex-1 place-items-center p-10 text-center text-muted-foreground">
-                  Dice imports land here. Import a posting URL from Settings to give it a Jobright
-                  id, a fit score and status tracking.
-                </div>
               ) : (
                 <Jobs
                   tab={feed}
@@ -492,6 +526,16 @@ export default function App(): React.JSX.Element {
                   onRemoveQueued={(id) => void window.api.queueRemove(id).then(setQueue)}
                   onClearFinished={() => void window.api.queueClearFinished().then(setQueue)}
                   search={search}
+                  onAddExternal={feed === 'external' ? addExternal : undefined}
+                  onPasteDescription={feed === 'external' ? openBlank : undefined}
+                  onRemoveExternal={
+                    feed === 'external'
+                      ? (id: string) =>
+                          void window.api.externalRemove(id).then((list) =>
+                            setJobs((prev) => ({ ...prev, external: list }))
+                          )
+                      : undefined
+                  }
                 />
               )}
             </>

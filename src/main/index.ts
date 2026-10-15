@@ -6,6 +6,7 @@ import { readFile } from 'fs/promises'
 import * as jobright from './jobright'
 import { JobrightAuthError } from './jobright'
 import { backfillFromJobright, pushStatus } from './sync'
+import { addExternal, listExternal, removeExternal } from './external'
 import type { JobrightJob, SavedFilter } from '../shared/jobright'
 import type { JobrightReply } from '../shared/ipc'
 
@@ -292,6 +293,11 @@ function registerIpc(): void {
     void shell.openExternal(url)
     return true
   })
+
+  // Externally added jobs: paste a URL, tailor it here, sync to Jobright.
+  ipcMain.handle('external:add', (_e, url: string) => addExternal(url))
+  ipcMain.handle('external:list', () => listExternal())
+  ipcMain.handle('external:remove', (_e, jobId: string) => removeExternal(jobId))
 
   // Job posting fetch (URL -> company/role/description)
   ipcMain.handle('job:fetch', (_e, url: string) => fetchJobPosting(url))

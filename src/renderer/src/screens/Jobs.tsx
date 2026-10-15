@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Ban,
+  Link as LinkIcon,
+  Loader2,
   Briefcase,
   Building2,
   Check,
   Clock,
   DollarSign,
   ExternalLink,
+  FileText,
   MapPin,
   Sparkles,
   Star,
@@ -19,6 +22,7 @@ import type { QueueItem } from '../../../shared/queue'
 import { BULK_WARN_THRESHOLD, isActive } from '../../../shared/queue'
 import { cn } from '../lib/utils'
 import { Button, IconButton } from '../components/ui/button'
+import { Input } from '../components/ui/input'
 import { Badge, Kbd } from '../components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import {
@@ -124,6 +128,11 @@ export interface JobsProps {
   onRemoveQueued: (id: string) => void
   onClearFinished: () => void
   search: string
+  /** Present only on the External tab: add a job by pasting its URL. */
+  onAddExternal?: (url: string) => Promise<boolean>
+  /** Present only on the External tab: open a blank workspace to paste a description into. */
+  onPasteDescription?: () => void
+  onRemoveExternal?: (jobId: string) => void
 }
 
 export function Jobs(props: JobsProps): React.JSX.Element {
@@ -214,7 +223,7 @@ export function Jobs(props: JobsProps): React.JSX.Element {
         break
       default:
         // Jobright's own ranking, which is what the feed arrives in.
-        sorted.sort((a, b) => b.fit - a.fit)
+        sorted.sort((a, b) => (b.fitExact ?? b.fit) - (a.fitExact ?? a.fit))
     }
     return sorted
   }, [jobs, search, sort, appByJob, hideApplied])
@@ -259,6 +268,10 @@ export function Jobs(props: JobsProps): React.JSX.Element {
 
   return (
     <>
+      {props.onAddExternal && (
+        <AddByUrl onAdd={props.onAddExternal} onPaste={props.onPasteDescription} />
+      )}
+
       <div className="flex min-h-[46px] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card-muted px-5 py-2">
         <Select value={sort} onValueChange={(v) => setSort(v as FeedSort)}>
           <SelectTrigger className="w-[150px]">
@@ -305,7 +318,13 @@ export function Jobs(props: JobsProps): React.JSX.Element {
           ) : props.error && !jobs.length ? (
             <Empty>{props.error}</Empty>
           ) : !visible.length ? (
-            <Empty>{search ? `Nothing matching “${search}”.` : 'No jobs in this feed yet.'}</Empty>
+            <Empty>
+              {search
+                ? `Nothing matching “${search}”.`
+                : props.onAddExternal
+                  ? 'Nothing here yet. Paste a job posting URL above, or paste the description itself, to tailor it.'
+                  : 'No jobs in this feed yet.'}
+            </Empty>
           ) : open ? (
             visible.map((job) => (
               <MiniCard
@@ -945,6 +964,64 @@ function QueueRow({
           <X className="h-3 w-3" />
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Paste a posting URL to add a job the feed does not have — or, when there is
+ * no URL to read, jump straight to a blank workspace and paste the text.
+ *
+ * The fetch can take a while — some hosts need the page read and the model to
+ * extract from it — so the field stays disabled with a spinner rather than
+ * looking idle, and only clears on success.
+ */
+function AddByUrl({
+  onAdd,
+  onPaste
+}: {
+  onAdd: (url: string) => Promise<boolean>
+  onPaste?: () => void
+}): React.JSX.Element {
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit(): Promise<void> {
+    const v = url.trim()
+    if (!v || busy) return
+    setBusy(true)
+    const ok = await onAdd(v)
+    setBusy(false)
+    if (ok) setUrl('')
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card-muted px-5 py-3">
+      <div className="relative flex-1">
+        <LinkIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+        <Input
+          value={url}
+          disabled={busy}
+          placeholder="Paste a job posting URL — Workday, Greenhouse, Ashby, Lever, LinkedIn or any careers page"
+          className="pl-8"
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void submit()}
+        />
+      </div>
+      <Button onClick={submit} disabled={busy || !url.trim()}>
+        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {busy ? 'Reading posting…' : 'Add job'}
+      </Button>
+      {onPaste && (
+        <Button
+          variant="ghost"
+          onClick={onPaste}
+          title="No link, or the posting will not load? Paste the description text instead"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Paste description
+        </Button>
+      )}
     </div>
   )
 }

@@ -87,6 +87,7 @@ function job(over: Partial<JobrightJob> & { jobId: string; title: string; compan
     postedAt: Date.now(),
     applicantsDesc: '< 25 applicants',
     fit: 85,
+    fitExact: 85,
     fitRank: 'Strong Match',
     fitBreakdown: { experience: 94, skills: 100, industry: 39 },
     summary: '',

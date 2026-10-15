@@ -117,6 +117,15 @@ const api = {
   setApplicationStatus: (id: string, status: ApplicationStatus): Promise<SetStatusReply> =>
     ipcRenderer.invoke('apps:setStatus', id, status),
 
+  // Externally added jobs
+  externalAdd: (
+    url: string
+  ): Promise<{ ok: boolean; job?: JobrightJob; description?: string; error?: string }> =>
+    ipcRenderer.invoke('external:add', url),
+  externalList: (): Promise<JobrightJob[]> => ipcRenderer.invoke('external:list'),
+  externalRemove: (jobId: string): Promise<JobrightJob[]> =>
+    ipcRenderer.invoke('external:remove', jobId),
+
   // Tailoring queue
   queueList: (): Promise<QueueItem[]> => ipcRenderer.invoke('queue:list'),
   queueAdd: (jobs: JobrightJob[], baseId: string): Promise<QueueItem[]> =>

@@ -7,6 +7,7 @@ import type { Application } from '../shared/application'
 import type { TailorDraft } from '../shared/draft'
 import type { JobResultsState } from '../shared/jobs'
 import type { QueueItem } from '../shared/queue'
+import type { JobrightJob } from '../shared/jobright'
 import { emptySettings, type AppSettings } from '../shared/settings'
 import {
   emptyTotals,
@@ -217,4 +218,16 @@ export function resetUsage(): void {
 export function saveApplications(all: Application[]): Application[] {
   writeJson(appsPath(), all)
   return all
+}
+
+// --- Externally added jobs (pasted URLs) -----------------------------------
+
+const externalPath = (): string => join(dataDir(), 'external.json')
+
+export function loadExternal(): JobrightJob[] {
+  return readJson<JobrightJob[]>(externalPath(), [])
+}
+
+export function saveExternal(jobs: JobrightJob[]): void {
+  writeJson(externalPath(), jobs)
 }

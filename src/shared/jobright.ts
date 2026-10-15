@@ -73,8 +73,14 @@ export interface JobrightJob {
   postedDesc: string
   postedAt: number | null
   applicantsDesc: string
-  /** Jobright's fit score, 0-100, and its components. */
+  /** Jobright's fit score, 0-100, rounded for display. */
   fit: number
+  /**
+   * The unrounded score. Rounding collapses the feed into large ties — ten jobs
+   * at 90, nine at 93 — and sorting on that makes the order within a group look
+   * arbitrary. Display uses `fit`; ordering uses this.
+   */
+  fitExact: number
   fitRank: string
   fitBreakdown: FitBreakdown
   /** Structured job description. There is no raw JD anywhere in Jobright. */

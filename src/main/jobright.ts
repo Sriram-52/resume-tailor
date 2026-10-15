@@ -206,6 +206,20 @@ export async function signOut(): Promise<JobrightStatus> {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 const num = (v: unknown): number | null => (typeof v === 'number' && !Number.isNaN(v) ? v : null)
+
+/**
+ * A timestamp as epoch ms. Jobright is inconsistent here: `applyTime` is a
+ * number, but `publishTime` is a string like "2026-09-14 03:42:17" with no
+ * timezone. Reading the latter with `num` silently yields null, which turns any
+ * sort by recency into a no-op — so both shapes are handled.
+ */
+const time = (v: unknown): number | null => {
+  if (typeof v === 'number' && !Number.isNaN(v)) return v
+  if (typeof v !== 'string' || !v.trim()) return null
+  // Space-separated form is not reliably parsed everywhere; make it ISO-ish.
+  const t = Date.parse(v.includes('T') ? v : v.trim().replace(' ', 'T'))
+  return Number.isNaN(t) ? null : t
+}
 /**
  * Coerce one of Jobright's list fields to strings. Most are plain string arrays,
  * but a few carry objects, and a React child that is an object crashes the
@@ -290,9 +304,10 @@ export function normalize(raw: unknown): JobrightJob | null {
     applyUrl: str(j.applyLink) || str(j.originalUrl),
     isCompanySiteLink: j.isCompanySiteLink === true,
     postedDesc: str(j.publishTimeDesc),
-    postedAt: num(j.publishTime),
+    postedAt: time(j.publishTime),
     applicantsDesc: str(j.applicantsDisplayText),
     fit: Math.round(fitRaw),
+    fitExact: fitRaw,
     fitRank: str(it.rankDesc),
     fitBreakdown: breakdown(j),
     summary: str(j.jobSummary),
@@ -307,7 +322,7 @@ export function normalize(raw: unknown): JobrightJob | null {
     citizenOnly: j.isCitizenOnly === true,
     clearanceRequired: j.isClearanceRequired === true,
     applyStatus: applyStatus === null ? null : (applyStatus as JobrightApplyStatus),
-    appliedAt: num(it.applyTime)
+    appliedAt: time(it.applyTime)
   }
 }
 
