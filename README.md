@@ -50,7 +50,7 @@ pnpm dev           # run in development with hot reload
 Everything is configured from the in-app **Settings** tab — there's no `.env` and nothing to edit before building. Values are stored locally on your machine (in the app's `userData` dir) and are never bundled with the app, so it can be shipped as a DMG without embedding any secrets.
 
 - **Apify API token** — enables the **Discover** tab (job search via Dice.com). Get one at [console.apify.com/account/integrations](https://console.apify.com/account/integrations). Apify bills per result (~$3 / 1,000). Leave it blank if you don't use Discover; everything else works without it.
-- **Model** — which Claude model to use for tailoring, ATS analysis, cover letters, and chat (Sonnet 5 by default; Opus 4.8 or Haiku 4.5 also available). Runs on your Claude Code subscription, so pick a model your plan includes.
+- **Model** — which Claude model to use for tailoring, ATS analysis, cover letters, and chat (Sonnet 5.5 by default; Fable 5.1, Opus 5.5 or Haiku 5.5 also available). Runs on your Claude Code subscription, so pick a model your plan includes.
 
 ## Building
 

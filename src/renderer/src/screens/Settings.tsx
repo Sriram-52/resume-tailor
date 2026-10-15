@@ -216,6 +216,10 @@ export function Settings(): React.JSX.Element {
                 {m.label}
               </option>
             ))}
+            {/* A model saved before it left the list keeps running; show it rather than mislabel it. */}
+            {!MODEL_OPTIONS.some((m) => m.value === settings.tailorModel) && (
+              <option value={settings.tailorModel}>{settings.tailorModel} (no longer listed)</option>
+            )}
           </select>
         </label>
       </div>
